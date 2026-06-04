@@ -17,7 +17,8 @@ class VoipAudioRouteManager {
     VoipAudioLogger.enableLogs = enableLogs;
     VoipAudioLogger.log('Initializing VoipAudioRouteManager...');
     try {
-      await VoipAudioRouteManagerPlatform.instance.initialize(enableLogs: enableLogs);
+      await VoipAudioRouteManagerPlatform.instance
+          .initialize(enableLogs: enableLogs);
       VoipAudioLogger.log('Initialization completed.');
     } catch (e) {
       VoipAudioLogger.log('Initialization failed: $e');
@@ -28,7 +29,8 @@ class VoipAudioRouteManager {
   /// Returns the list of currently available audio output devices.
   Future<List<AudioOutputDevice>> availableDevices() async {
     VoipAudioLogger.log('Requesting available devices...');
-    final devices = await VoipAudioRouteManagerPlatform.instance.availableDevices();
+    final devices =
+        await VoipAudioRouteManagerPlatform.instance.availableDevices();
     VoipAudioLogger.log('Available devices: $devices');
     return devices;
   }
@@ -36,7 +38,8 @@ class VoipAudioRouteManager {
   /// Returns the currently active audio output route.
   Future<AudioOutputDevice?> currentAudioRoute() async {
     VoipAudioLogger.log('Requesting current audio route...');
-    final route = await VoipAudioRouteManagerPlatform.instance.currentAudioRoute();
+    final route =
+        await VoipAudioRouteManagerPlatform.instance.currentAudioRoute();
     VoipAudioLogger.log('Current audio route: $route');
     return route;
   }
@@ -67,7 +70,8 @@ class VoipAudioRouteManager {
 
   /// Emits updates containing the full list of available devices (including selection status).
   Stream<List<AudioOutputDevice>> get audioDevicesStream {
-    return VoipAudioRouteManagerPlatform.instance.audioDevicesStream.map((devices) {
+    return VoipAudioRouteManagerPlatform.instance.audioDevicesStream
+        .map((devices) {
       VoipAudioLogger.log('Audio Devices Stream Update: $devices');
       return devices;
     });
@@ -75,13 +79,16 @@ class VoipAudioRouteManager {
 
   /// Stream of individual devices that just connected.
   Stream<AudioOutputDevice> get onDeviceConnected {
-    return VoipAudioRouteManagerPlatform.instance.onDeviceConnected.map((device) {
-      if (device.type == AudioOutputType.bluetooth || device.type == AudioOutputType.airpods) {
+    return VoipAudioRouteManagerPlatform.instance.onDeviceConnected
+        .map((device) {
+      if (device.type == AudioOutputType.bluetooth ||
+          device.type == AudioOutputType.airpods) {
         VoipAudioLogger.log('Bluetooth Connected: ${device.name}');
       } else if (device.type == AudioOutputType.wiredHeadset) {
         VoipAudioLogger.log('Wired Headset Connected: ${device.name}');
       } else {
-        VoipAudioLogger.log('Device Connected: ${device.name} (${device.type.name})');
+        VoipAudioLogger.log(
+            'Device Connected: ${device.name} (${device.type.name})');
       }
       return device;
     });
@@ -89,13 +96,16 @@ class VoipAudioRouteManager {
 
   /// Stream of individual devices that just disconnected.
   Stream<AudioOutputDevice> get onDeviceDisconnected {
-    return VoipAudioRouteManagerPlatform.instance.onDeviceDisconnected.map((device) {
-      if (device.type == AudioOutputType.bluetooth || device.type == AudioOutputType.airpods) {
+    return VoipAudioRouteManagerPlatform.instance.onDeviceDisconnected
+        .map((device) {
+      if (device.type == AudioOutputType.bluetooth ||
+          device.type == AudioOutputType.airpods) {
         VoipAudioLogger.log('Bluetooth Disconnected: ${device.name}');
       } else if (device.type == AudioOutputType.wiredHeadset) {
         VoipAudioLogger.log('Wired Headset Disconnected: ${device.name}');
       } else {
-        VoipAudioLogger.log('Device Disconnected: ${device.name} (${device.type.name})');
+        VoipAudioLogger.log(
+            'Device Disconnected: ${device.name} (${device.type.name})');
       }
       return device;
     });
@@ -109,7 +119,8 @@ class VoipAudioRouteManager {
       } else if (device.type == AudioOutputType.receiver) {
         VoipAudioLogger.log('Receiver Enabled');
       } else {
-        VoipAudioLogger.log('Route Changed: ${device.name} (${device.type.name})');
+        VoipAudioLogger.log(
+            'Route Changed: ${device.name} (${device.type.name})');
       }
       return device;
     });
@@ -117,8 +128,10 @@ class VoipAudioRouteManager {
 
   /// Stream of audio focus changes (gained or lost).
   Stream<bool> get onAudioFocusChanged {
-    return VoipAudioRouteManagerPlatform.instance.onAudioFocusChanged.map((focused) {
-      VoipAudioLogger.log('Audio Focus Changed: ${focused ? "Gained" : "Lost"}');
+    return VoipAudioRouteManagerPlatform.instance.onAudioFocusChanged
+        .map((focused) {
+      VoipAudioLogger.log(
+          'Audio Focus Changed: ${focused ? "Gained" : "Lost"}');
       return focused;
     });
   }
@@ -137,6 +150,7 @@ class VoipAudioRouteManager {
   /// according to the W3C Audio Output Devices API specification. An optional [deviceId]
   /// can be passed to suggest a preferred device to select initially.
   Future<AudioOutputDevice?> selectAudioOutput({String? deviceId}) {
-    return VoipAudioRouteManagerPlatform.instance.selectAudioOutput(deviceId: deviceId);
+    return VoipAudioRouteManagerPlatform.instance
+        .selectAudioOutput(deviceId: deviceId);
   }
 }

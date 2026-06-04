@@ -2,20 +2,28 @@
 enum AudioOutputType {
   /// Built-in speakerphone or device speaker.
   speaker,
+
   /// Built-in phone receiver (earpiece).
   receiver,
+
   /// Bluetooth audio output device (HFP, A2DP, or BLE).
   bluetooth,
+
   /// Wired headset or headphones plugged in via aux/jack.
   wiredHeadset,
+
   /// Apple AirPods specific bluetooth profile.
   airpods,
+
   /// USB external audio dock or interface.
   usbAudio,
+
   /// Connected vehicular CarPlay or Android Auto audio dock.
   carAudio,
+
   /// HDMI output screen or receiver.
   hdmi,
+
   /// Unsupported or unmapped audio output type.
   unknown,
 }
@@ -24,13 +32,13 @@ enum AudioOutputType {
 class AudioOutputDevice {
   /// The unique hardware identifier or logical ID of the audio output device.
   final String id;
-  
+
   /// The human-readable display name of the audio output device.
   final String name;
-  
+
   /// The mapped classification type of the audio output device.
   final AudioOutputType type;
-  
+
   /// Indicates whether the audio routing engine is currently active on this device.
   final bool isSelected;
 

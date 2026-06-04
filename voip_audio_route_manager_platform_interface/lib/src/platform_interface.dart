@@ -9,7 +9,8 @@ abstract class VoipAudioRouteManagerPlatform extends PlatformInterface {
 
   static final Object _token = Object();
 
-  static VoipAudioRouteManagerPlatform _instance = MethodChannelVoipAudioRouteManager();
+  static VoipAudioRouteManagerPlatform _instance =
+      MethodChannelVoipAudioRouteManager();
 
   /// The default instance of [VoipAudioRouteManagerPlatform] to use.
   ///

@@ -62,7 +62,7 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
 
   Future<void> _updateDevices() async {
     final currentDevices = await availableDevices();
-    
+
     // Compare to detect connections/disconnections
     final oldMap = {for (var d in _lastDevices) d.id: d};
     final newMap = {for (var d in currentDevices) d.id: d};
@@ -94,7 +94,9 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
       }
     }
 
-    if (_selectedDeviceId != null && _selectedDeviceId != 'default' && _selectedDeviceId!.isNotEmpty) {
+    if (_selectedDeviceId != null &&
+        _selectedDeviceId != 'default' &&
+        _selectedDeviceId!.isNotEmpty) {
       _applySinkIdToAllMediaElements(_selectedDeviceId!);
     }
   }
@@ -109,7 +111,8 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
           id: 'default',
           name: 'System Default Audio Device',
           type: AudioOutputType.speaker,
-          isSelected: _selectedDeviceId == null || _selectedDeviceId == 'default',
+          isSelected:
+              _selectedDeviceId == null || _selectedDeviceId == 'default',
         ),
       ];
     }
@@ -147,7 +150,8 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
             id: 'default',
             name: 'System Default Audio Device',
             type: AudioOutputType.speaker,
-            isSelected: _selectedDeviceId == null || _selectedDeviceId == 'default',
+            isSelected:
+                _selectedDeviceId == null || _selectedDeviceId == 'default',
           ),
         );
       }
@@ -159,7 +163,8 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
           id: 'default',
           name: 'System Default Audio Device',
           type: AudioOutputType.speaker,
-          isSelected: _selectedDeviceId == null || _selectedDeviceId == 'default',
+          isSelected:
+              _selectedDeviceId == null || _selectedDeviceId == 'default',
         ),
       ];
     }
@@ -211,7 +216,9 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
     final match = list.firstWhere((d) => d.id == id, orElse: () => list.first);
     _selectedDeviceId = match.id;
     _routeChangedStreamController.add(match.copyWith(isSelected: true));
-    if (_selectedDeviceId != null && _selectedDeviceId != 'default' && _selectedDeviceId!.isNotEmpty) {
+    if (_selectedDeviceId != null &&
+        _selectedDeviceId != 'default' &&
+        _selectedDeviceId!.isNotEmpty) {
       _applySinkIdToAllMediaElements(_selectedDeviceId!);
     }
     await _updateDevices();
@@ -277,7 +284,8 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
 
   void _injectInterceptionScript() {
     try {
-      final script = web.document.createElement('script') as web.HTMLScriptElement;
+      final script =
+          web.document.createElement('script') as web.HTMLScriptElement;
       script.text = '''
 (function() {
   if (window._voipAudioRouteManagerInitialized) return;
@@ -419,7 +427,8 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
     try {
       final windowJS = web.window as JSObject;
       if (windowJS.hasProperty('_voipAudioRouteManagerSetSinkId'.toJS).toDart) {
-        windowJS.callMethod('_voipAudioRouteManagerSetSinkId'.toJS, deviceId.toJS);
+        windowJS.callMethod(
+            '_voipAudioRouteManagerSetSinkId'.toJS, deviceId.toJS);
       } else {
         // Fallback
         final doc = web.document;
@@ -446,10 +455,12 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
   void _setupMutationObserver() {
     if (_mediaObserver != null) return;
     try {
-      _mediaObserver = web.MutationObserver((JSArray mutations, web.MutationObserver observer) {
+      _mediaObserver = web.MutationObserver(
+          (JSArray mutations, web.MutationObserver observer) {
         final currentId = _selectedDeviceId;
-        if (currentId == null || currentId == 'default' || currentId.isEmpty) return;
-        
+        if (currentId == null || currentId == 'default' || currentId.isEmpty)
+          return;
+
         final list = mutations.toDart;
         for (var i = 0; i < list.length; i++) {
           final mutation = list[i] as web.MutationRecord;
@@ -478,7 +489,7 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
       if (tagName == 'audio' || tagName == 'video') {
         _applySinkIdToElement(element as JSObject, deviceId);
       }
-      
+
       final audios = element.querySelectorAll('audio');
       for (var i = 0; i < audios.length; i++) {
         _applySinkIdToElement(audios.item(i) as JSObject, deviceId);
@@ -494,7 +505,7 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
   Future<AudioOutputDevice?> selectAudioOutput({String? deviceId}) async {
     final mediaDevices = _getMediaDevices();
     if (mediaDevices == null) return null;
-    
+
     final mediaDevicesJS = mediaDevices as JSObject;
     if (mediaDevicesJS.hasProperty('selectAudioOutput'.toJS).toDart) {
       try {
@@ -502,26 +513,28 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
         if (deviceId != null && deviceId.isNotEmpty) {
           final options = JSObject();
           options.setProperty('deviceId'.toJS, deviceId.toJS);
-          promise = mediaDevicesJS.callMethod<JSPromise>('selectAudioOutput'.toJS, options);
+          promise = mediaDevicesJS.callMethod<JSPromise>(
+              'selectAudioOutput'.toJS, options);
         } else {
-          promise = mediaDevicesJS.callMethod<JSPromise>('selectAudioOutput'.toJS);
+          promise =
+              mediaDevicesJS.callMethod<JSPromise>('selectAudioOutput'.toJS);
         }
         final deviceInfo = await promise.toDart;
         final deviceInfoJS = deviceInfo as JSObject;
-        
+
         final idVal = deviceInfoJS.getProperty('deviceId'.toJS);
         final labelVal = deviceInfoJS.getProperty('label'.toJS);
-        
+
         final id = idVal is JSString ? idVal.toDart : '';
         final label = labelVal is JSString ? labelVal.toDart : 'Audio Output';
-        
+
         final device = AudioOutputDevice(
           id: id,
           name: label.isEmpty ? 'Audio Output' : label,
           type: _inferType(label),
           isSelected: true,
         );
-        
+
         await setAudioRoute(device.id);
         return device;
       } catch (_) {

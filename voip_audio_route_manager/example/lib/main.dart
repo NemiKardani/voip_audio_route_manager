@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _audioFocus = false;
   final List<String> _consoleLogs = [];
   final _logScrollController = ScrollController();
-  
+
   late final List<StreamSubscription> _subscriptions;
 
   @override
@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await _manager.initialize(enableLogs: true);
       _addLog('VoipAudioRouteManager Initialized with logs.');
-      
+
       // Start listening to streams
       _subscriptions = [
         _manager.audioDevicesStream.listen((devices) {
@@ -100,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _devices = available;
         _initialized = true;
       });
-      
+
       _addLog('Initial devices loaded: ${available.length} found.');
     } catch (e) {
       _addLog('Initialization error: $e');
@@ -124,7 +124,8 @@ class _HomeScreenState extends State<HomeScreen> {
     // Auto-scroll to bottom
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_logScrollController.hasClients) {
-        _logScrollController.jumpTo(_logScrollController.position.maxScrollExtent);
+        _logScrollController
+            .jumpTo(_logScrollController.position.maxScrollExtent);
       }
     });
   }
@@ -198,8 +199,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.colorScheme.primary,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
+                          shape: const RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(8))),
                         ),
                         icon: const Icon(Icons.power_settings_new),
                         label: const Text('Initialize Manager'),
@@ -231,21 +235,28 @@ class _HomeScreenState extends State<HomeScreen> {
                             if (_currentRoute != null)
                               Row(
                                 children: [
-                                  Icon(_getDeviceIcon(_currentRoute!.type), size: 32, color: Colors.white),
+                                  Icon(_getDeviceIcon(_currentRoute!.type),
+                                      size: 32, color: Colors.white),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           _currentRoute!.name,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                         Text(
-                                          _currentRoute!.type.name.toUpperCase(),
-                                          style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                          _currentRoute!.type.name
+                                              .toUpperCase(),
+                                          style: const TextStyle(
+                                              color: Colors.white54,
+                                              fontSize: 11),
                                         ),
                                       ],
                                     ),
@@ -262,14 +273,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 8),
                   Card(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 20.0),
                       child: Column(
                         children: [
-                          const Text('AUDIO FOCUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70)),
+                          const Text('AUDIO FOCUS',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white70)),
                           const SizedBox(height: 8),
                           Icon(
                             _audioFocus ? Icons.lock : Icons.lock_open,
-                            color: _audioFocus ? theme.colorScheme.secondary : Colors.white24,
+                            color: _audioFocus
+                                ? theme.colorScheme.secondary
+                                : Colors.white24,
                             size: 24,
                           ),
                         ],
@@ -283,7 +301,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 Card(
                   color: const Color(0xFF1E293B),
                   shape: RoundedRectangleBorder(
-                    side: BorderSide(color: theme.colorScheme.primary.withAlpha(128)),
+                    side: BorderSide(
+                        color: theme.colorScheme.primary.withAlpha(128)),
                     borderRadius: const BorderRadius.all(Radius.circular(12)),
                   ),
                   child: Padding(
@@ -295,7 +314,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Expanded(
                           child: Text(
                             'On Web, browser security hides output devices (e.g. Bluetooth) and labels until microphone permission is granted.',
-                            style: TextStyle(fontSize: 12, color: Colors.white70),
+                            style:
+                                TextStyle(fontSize: 12, color: Colors.white70),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -303,7 +323,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPressed: () async {
                             _addLog('Requesting microphone permission...');
                             final granted = await _manager.requestPermissions();
-                            _addLog('Microphone permission result: ${granted ? "Granted" : "Denied"}');
+                            _addLog(
+                                'Microphone permission result: ${granted ? "Granted" : "Denied"}');
                             if (granted) {
                               await _refreshRoute();
                             }
@@ -314,13 +335,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         TextButton(
                           onPressed: () async {
                             final currentId = _currentRoute?.id;
-                            _addLog('Opening W3C Audio Output Selector (preferred device: $currentId)...');
-                            final device = await _manager.selectAudioOutput(deviceId: currentId);
+                            _addLog(
+                                'Opening W3C Audio Output Selector (preferred device: $currentId)...');
+                            final device = await _manager.selectAudioOutput(
+                                deviceId: currentId);
                             if (device != null) {
                               _addLog('W3C Device selected: ${device.name}');
                               await _refreshRoute();
                             } else {
-                              _addLog('W3C Device selector closed or not supported.');
+                              _addLog(
+                                  'W3C Device selector closed or not supported.');
                             }
                           },
                           child: const Text('SELECT SINK'),
@@ -331,11 +355,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 12),
               ],
-              
+
               // Device List Header
               Text(
                 'AVAILABLE OUTPUT DEVICES (${_devices.length})',
-                style: theme.textTheme.titleSmall?.copyWith(color: Colors.white70, letterSpacing: 1.2),
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(color: Colors.white70, letterSpacing: 1.2),
               ),
               const SizedBox(height: 8),
 
@@ -358,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       );
                     }
-                    
+
                     final device = _devices[index];
                     return Card(
                       color: device.isSelected
@@ -366,37 +391,55 @@ class _HomeScreenState extends State<HomeScreen> {
                           : theme.cardTheme.color,
                       shape: RoundedRectangleBorder(
                         side: BorderSide(
-                          color: device.isSelected ? theme.colorScheme.primary : Colors.transparent,
+                          color: device.isSelected
+                              ? theme.colorScheme.primary
+                              : Colors.transparent,
                           width: 1.5,
                         ),
-                        borderRadius: const BorderRadius.all(Radius.circular(12)),
+                        borderRadius:
+                            const BorderRadius.all(Radius.circular(12)),
                       ),
                       child: ListTile(
-                        leading: Icon(_getDeviceIcon(device.type), color: device.isSelected ? theme.colorScheme.primary : Colors.white70),
+                        leading: Icon(_getDeviceIcon(device.type),
+                            color: device.isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.white70),
                         title: Text(
                           device.name,
                           style: TextStyle(
-                            fontWeight: device.isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: device.isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
-                        subtitle: Text(device.type.name.toUpperCase(), style: const TextStyle(fontSize: 11, color: Colors.white54)),
+                        subtitle: Text(device.type.name.toUpperCase(),
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.white54)),
                         trailing: device.isSelected
                             ? Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: theme.colorScheme.primary,
-                                  borderRadius: const BorderRadius.all(Radius.circular(12)),
+                                  borderRadius: const BorderRadius.all(
+                                      Radius.circular(12)),
                                 ),
                                 child: const Text(
                                   'ACTIVE',
-                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
                                 ),
                               )
                             : OutlinedButton(
                                 style: OutlinedButton.styleFrom(
-                                  side: BorderSide(color: theme.colorScheme.primary),
+                                  side: BorderSide(
+                                      color: theme.colorScheme.primary),
                                   foregroundColor: theme.colorScheme.primary,
-                                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                                  shape: const RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.all(Radius.circular(8))),
                                 ),
                                 onPressed: () => _manager.setAudioRoute(device),
                                 child: const Text('SWITCH'),
@@ -407,19 +450,31 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              
+
               // Route Shortcut Options
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildShortcutButton('Speaker', () => _manager.setAudioRouteType(AudioOutputType.speaker)),
+                    _buildShortcutButton(
+                        'Speaker',
+                        () => _manager
+                            .setAudioRouteType(AudioOutputType.speaker)),
                     const SizedBox(width: 8),
-                    _buildShortcutButton('Earpiece', () => _manager.setAudioRouteType(AudioOutputType.receiver)),
+                    _buildShortcutButton(
+                        'Earpiece',
+                        () => _manager
+                            .setAudioRouteType(AudioOutputType.receiver)),
                     const SizedBox(width: 8),
-                    _buildShortcutButton('Bluetooth', () => _manager.setAudioRouteType(AudioOutputType.bluetooth)),
+                    _buildShortcutButton(
+                        'Bluetooth',
+                        () => _manager
+                            .setAudioRouteType(AudioOutputType.bluetooth)),
                     const SizedBox(width: 8),
-                    _buildShortcutButton('Wired', () => _manager.setAudioRouteType(AudioOutputType.wiredHeadset)),
+                    _buildShortcutButton(
+                        'Wired',
+                        () => _manager
+                            .setAudioRouteType(AudioOutputType.wiredHeadset)),
                   ],
                 ),
               ),
@@ -429,7 +484,8 @@ class _HomeScreenState extends State<HomeScreen> {
             // Logging output console
             Text(
               'LIVE EVENTS & DEBUG LOGS',
-              style: theme.textTheme.titleSmall?.copyWith(color: Colors.white70, letterSpacing: 1.2),
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(color: Colors.white70, letterSpacing: 1.2),
             ),
             const SizedBox(height: 6),
             Expanded(
@@ -467,7 +523,8 @@ class _HomeScreenState extends State<HomeScreen> {
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF334155),
         foregroundColor: Colors.white,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(8))),
       ),
       onPressed: onPressed,
       child: Text(text),
