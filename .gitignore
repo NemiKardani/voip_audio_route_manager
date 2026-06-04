@@ -1,0 +1,43 @@
+# Dependency directories
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+
+# Build artifacts
+build/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Local configuration
+local.properties
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# iOS / macOS build files
+Pods/
+.symlinks/
+*.xcworkspace
+*.lock
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+*.xccheckout
+DerivedData/
+flutter_export_environment.sh
+Generated.xcconfig
+flutter_plugin_registrant.h
+flutter_plugin_registrant.m
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_plugin_registrant.h
+**/ios/Flutter/flutter_plugin_registrant.m
+**/macos/Flutter/ephemeral/

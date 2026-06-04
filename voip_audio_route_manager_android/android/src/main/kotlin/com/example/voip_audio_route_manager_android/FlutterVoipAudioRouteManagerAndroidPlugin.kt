@@ -1,0 +1,550 @@
+package com.example.voip_audio_route_manager_android
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.media.AudioDeviceCallback
+import android.media.AudioFocusRequest
+import android.media.AudioAttributes
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import androidx.annotation.NonNull
+import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.MethodChannel.MethodCallHandler
+import io.flutter.plugin.common.MethodChannel.Result
+
+public class FlutterVoipAudioRouteManagerAndroidPlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHandler {
+  private lateinit var methodChannel : MethodChannel
+  private lateinit var eventChannel : EventChannel
+  private var eventSink: EventChannel.EventSink? = null
+  
+  private var context: Context? = null
+  private var audioManager: AudioManager? = null
+  private var enableLogs = false
+  private val handler = Handler(Looper.getMainLooper())
+  
+  private var audioDeviceCallback: Any? = null // Typed as Any to compile cleanly on older SDKs
+  private var bluetoothReceiver: BroadcastReceiver? = null
+  private var headsetReceiver: BroadcastReceiver? = null
+  private var communicationDeviceListener: Any? = null
+  private var focusRequest: AudioFocusRequest? = null
+  private var preferredDeviceType: String? = null
+
+  override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+    context = flutterPluginBinding.applicationContext
+    audioManager = context?.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    
+    methodChannel = MethodChannel(flutterPluginBinding.binaryMessenger, "voip_audio_route_manager")
+    methodChannel.setMethodCallHandler(this)
+    
+    eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "voip_audio_route_manager/events")
+    eventChannel.setStreamHandler(this)
+  }
+
+  override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
+    val am = audioManager ?: return result.error("NO_AUDIO_MANAGER", "AudioManager is not initialized", null)
+    
+    when (call.method) {
+      "initialize" -> {
+        enableLogs = call.argument<Boolean>("enableLogs") ?: false
+        setupAudioDeviceCallback()
+        setupBroadcastReceivers()
+        log("Initialized plugin with log status: $enableLogs")
+        result.success(null)
+      }
+      "availableDevices" -> {
+        result.success(getAvailableDevices(am))
+      }
+      "currentAudioRoute" -> {
+        result.success(getCurrentAudioRoute(am))
+      }
+      "setAudioRoute" -> {
+        val deviceId = call.argument<String>("id")
+        if (deviceId != null) {
+          setAudioRouteById(am, deviceId, result)
+        } else {
+          result.error("INVALID_ARGUMENTS", "Device ID is required", null)
+        }
+      }
+      "setAudioRouteType" -> {
+        val type = call.argument<String>("type")
+        if (type != null) {
+          setRouteByType(am, type, result)
+        } else {
+          result.error("INVALID_ARGUMENTS", "Device type is required", null)
+        }
+      }
+      "setAudioRouteByName" -> {
+        val name = call.argument<String>("name")
+        if (name != null) {
+          setRouteByName(am, name, result)
+        } else {
+          result.error("INVALID_ARGUMENTS", "Device name is required", null)
+        }
+      }
+      else -> {
+        result.notImplemented()
+      }
+    }
+  }
+
+  override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+    eventSink = events
+    requestAudioFocus()
+    log("Event channel stream listening started.")
+  }
+
+  override fun onCancel(arguments: Any?) {
+    abandonAudioFocus()
+    eventSink = null
+    log("Event channel stream listening stopped.")
+  }
+
+  override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+    methodChannel.setMethodCallHandler(null)
+    eventChannel.setStreamHandler(null)
+    teardownCallbacks()
+    context = null
+    audioManager = null
+  }
+
+  private fun log(message: String) {
+    if (enableLogs) {
+      android.util.Log.d("VoipAudioAndroid", message)
+    }
+  }
+
+  private fun setupAudioDeviceCallback() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      val callback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+          log("Audio devices added.")
+          notifyDevicesChanged()
+        }
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+          log("Audio devices removed.")
+          notifyDevicesChanged()
+        }
+      }
+      audioManager?.registerAudioDeviceCallback(callback, handler)
+      audioDeviceCallback = callback
+    }
+    
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && audioManager != null) {
+      val listener = AudioManager.OnCommunicationDeviceChangedListener { device ->
+        log("Communication device changed to: ${device?.productName}")
+        notifyDevicesChanged()
+      }
+      audioManager?.addOnCommunicationDeviceChangedListener(context?.mainExecutor!!, listener)
+      communicationDeviceListener = listener
+    }
+  }
+
+  private fun setupBroadcastReceivers() {
+    val ctx = context ?: return
+    
+    // Listen to Bluetooth SCO changes
+    bluetoothReceiver = object : BroadcastReceiver() {
+      override fun onReceive(context: Context?, intent: Intent?) {
+        if (intent?.action == AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED) {
+          val state = intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_STATE, -1)
+          log("Bluetooth SCO audio state updated: $state")
+          notifyDevicesChanged()
+        }
+      }
+    }
+    ctx.registerReceiver(bluetoothReceiver, IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED))
+
+    // Listen to Wired Headset plug
+    headsetReceiver = object : BroadcastReceiver() {
+      override fun onReceive(context: Context?, intent: Intent?) {
+        if (intent?.action == Intent.ACTION_HEADSET_PLUG) {
+          val state = intent.getIntExtra("state", -1)
+          log("Wired Headset plug state updated: $state")
+          notifyDevicesChanged()
+        }
+      }
+    }
+    ctx.registerReceiver(headsetReceiver, IntentFilter(Intent.ACTION_HEADSET_PLUG))
+  }
+
+  private fun teardownCallbacks() {
+    val ctx = context
+    val am = audioManager
+    
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && am != null && audioDeviceCallback != null) {
+      am.unregisterAudioDeviceCallback(audioDeviceCallback as AudioDeviceCallback)
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && am != null && communicationDeviceListener != null) {
+      am.removeOnCommunicationDeviceChangedListener(communicationDeviceListener as AudioManager.OnCommunicationDeviceChangedListener)
+    }
+    if (ctx != null) {
+      bluetoothReceiver?.let { ctx.unregisterReceiver(it) }
+      headsetReceiver?.let { ctx.unregisterReceiver(it) }
+    }
+    bluetoothReceiver = null
+    headsetReceiver = null
+    audioDeviceCallback = null
+    communicationDeviceListener = null
+  }
+
+  private fun notifyDevicesChanged() {
+    handler.post {
+      val sink = eventSink ?: return@post
+      val am = audioManager ?: return@post
+      
+      val devices = getAvailableDevices(am)
+      sink.success(mapOf("event" to "devices_changed", "devices" to devices))
+      
+      val route = getCurrentAudioRoute(am)
+      if (route != null) {
+        sink.success(mapOf("event" to "route_changed", "device" to route))
+      }
+    }
+  }
+
+  private fun getAvailableDevices(am: AudioManager): List<Map<String, Any>> {
+    val list = mutableListOf<Map<String, Any>>()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      val infoList = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+      
+      // Check if we have any advanced Bluetooth device (A2DP or BLE)
+      val hasAdvancedBluetooth = infoList.any { 
+        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || 
+        it.type == AudioDeviceInfo.TYPE_BLE_HEADSET 
+      }
+      
+      val currentDevice = getActiveCommunicationDevice(am)
+      val currentDeviceType = currentDevice?.type
+      
+      val rawDevices = mutableListOf<Map<String, Any>>()
+      for (info in infoList) {
+        log("AudioDeviceInfo: id=${info.id}, name=${info.productName}, nativeType=${info.type}, mappedType=${mapDeviceType(info.type)}")
+        // Skip TYPE_BLUETOOTH_SCO if we already have A2DP or BLE headset to avoid duplicates
+        if (hasAdvancedBluetooth && info.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+          continue
+        }
+        
+        val type = mapDeviceType(info.type)
+        if (type == "unknown") continue
+        
+        rawDevices.add(mapOf(
+          "id" to info.id.toString(),
+          "name" to info.productName.toString(),
+          "type" to type,
+          "nativeType" to info.type
+        ))
+      }
+      
+      val hasBluetooth = rawDevices.any { it["type"] == "bluetooth" || it["type"] == "airpods" }
+      val hasWired = rawDevices.any { it["type"] == "wiredHeadset" || it["type"] == "usbAudio" }
+      
+      // Update preferredDeviceType based on current state and connectivity
+      if (preferredDeviceType != null) {
+        val isPreferredTypeConnected = when (preferredDeviceType) {
+          "speaker" -> rawDevices.any { it["type"] == "speaker" }
+          "receiver" -> rawDevices.any { it["type"] == "receiver" }
+          "bluetooth", "airpods" -> hasBluetooth
+          "wiredHeadset", "usbAudio" -> hasWired
+          else -> false
+        }
+        
+        if (!isPreferredTypeConnected) {
+          log("Preferred device type $preferredDeviceType is no longer connected. Clearing preference.")
+          preferredDeviceType = null
+        }
+      }
+      
+      // If preferredDeviceType is null, let's see if we should infer it from the current active device
+      if (preferredDeviceType == null && currentDevice != null) {
+        val activeType = mapDeviceType(currentDeviceType ?: -1)
+        if (activeType != "unknown") {
+          preferredDeviceType = activeType
+          log("Inferred preferredDeviceType from active device: $preferredDeviceType")
+        }
+      } else if (preferredDeviceType != null && currentDevice != null) {
+        val currentMappedType = mapDeviceType(currentDeviceType ?: -1)
+        if (currentMappedType != "unknown") {
+          var shouldOverride = false
+          if (preferredDeviceType != currentMappedType) {
+            if (currentMappedType == "wiredHeadset" || currentMappedType == "usbAudio") {
+              shouldOverride = true
+            } else if (currentMappedType == "bluetooth" || currentMappedType == "airpods") {
+              shouldOverride = true
+            } else if (currentMappedType == "speaker" || currentMappedType == "receiver") {
+              val isBluetoothPreferredAndConnected = (preferredDeviceType == "bluetooth" || preferredDeviceType == "airpods") && hasBluetooth
+              val isWiredPreferredAndConnected = (preferredDeviceType == "wiredHeadset" || preferredDeviceType == "usbAudio") && hasWired
+              if (!isBluetoothPreferredAndConnected && !isWiredPreferredAndConnected) {
+                shouldOverride = true
+              }
+            }
+          }
+          if (shouldOverride) {
+            log("System routed to $currentMappedType overriding preference $preferredDeviceType")
+            preferredDeviceType = currentMappedType
+          }
+        }
+      }
+      
+      for (device in rawDevices) {
+        val devId = device["id"] as String
+        val devType = device["type"] as String
+        val devNativeType = device["nativeType"] as Int
+        
+        val isSelected = if (preferredDeviceType != null) {
+          if (preferredDeviceType == "bluetooth" || preferredDeviceType == "airpods") {
+            devType == "bluetooth" || devType == "airpods"
+          } else if (preferredDeviceType == "wiredHeadset" || preferredDeviceType == "usbAudio") {
+            devType == "wiredHeadset" || devType == "usbAudio"
+          } else {
+            devType == preferredDeviceType
+          }
+        } else {
+          if (currentDevice != null) {
+            if (currentDeviceType == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || 
+                currentDeviceType == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || 
+                currentDeviceType == AudioDeviceInfo.TYPE_BLE_HEADSET) {
+              devType == "bluetooth" || devType == "airpods"
+            } else {
+              devId == currentDevice.id.toString()
+            }
+          } else {
+            // Fallback guess based on system routing hierarchy
+            if (am.isSpeakerphoneOn) {
+              devType == "speaker"
+            } else if (hasBluetooth) {
+              devType == "bluetooth" || devType == "airpods"
+            } else if (hasWired) {
+              devType == "wiredHeadset" || devType == "usbAudio"
+            } else {
+              devType == "receiver"
+            }
+          }
+        }
+        
+        list.add(mapOf(
+          "id" to devId,
+          "name" to device["name"] as String,
+          "type" to devType,
+          "isSelected" to isSelected
+        ))
+      }
+    } else {
+      // Legacy basic devices list
+      val isSpeaker = am.isSpeakerphoneOn
+      val isBluetooth = am.isBluetoothScoOn
+      
+      list.add(mapOf("id" to "speaker", "name" to "Built-in Speaker", "type" to "speaker", "isSelected" to isSpeaker))
+      list.add(mapOf("id" to "receiver", "name" to "Built-in Earpiece", "type" to "receiver", "isSelected" to (!isSpeaker && !isBluetooth)))
+      if (isBluetooth) {
+        list.add(mapOf("id" to "bluetooth", "name" to "Bluetooth Device", "type" to "bluetooth", "isSelected" to true))
+      }
+    }
+    return list
+  }
+
+  private fun getCurrentAudioRoute(am: AudioManager): Map<String, Any>? {
+    val devices = getAvailableDevices(am)
+    return devices.firstOrNull { it["isSelected"] == true } ?: devices.firstOrNull()
+  }
+
+  private fun getActiveCommunicationDevice(am: AudioManager): AudioDeviceInfo? {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      return am.communicationDevice
+    }
+    return null
+  }
+
+  private fun setAudioRouteById(am: AudioManager, id: String, result: Result) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      val infoList = am.availableCommunicationDevices
+      val targetId = id.toIntOrNull()
+      
+      var targetDevice = infoList.firstOrNull { it.id == targetId }
+      if (targetDevice == null && targetId != null) {
+        // If ID match fails, try matching by TYPE (e.g. if A2DP ID was passed but SCO ID is in availableCommunicationDevices)
+        val allDevices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val selectedDevice = allDevices.firstOrNull { it.id == targetId }
+        if (selectedDevice != null) {
+          val selectedType = mapDeviceType(selectedDevice.type)
+          targetDevice = infoList.firstOrNull { mapDeviceType(it.type) == selectedType }
+        }
+      }
+      
+      if (targetDevice != null) {
+        am.mode = AudioManager.MODE_IN_COMMUNICATION
+        val success = am.setCommunicationDevice(targetDevice)
+        if (success) {
+          preferredDeviceType = mapDeviceType(targetDevice.type)
+          log("Successfully set communication device to: ${targetDevice.productName}, preferredDeviceType set to: $preferredDeviceType")
+          result.success(null)
+          notifyDevicesChanged()
+        } else {
+          result.error("ROUTING_REJECTED", "Android rejected communication routing request", null)
+        }
+      } else {
+        // ID could be speaker/receiver if legacy fallback maps it
+        fallbackRouting(am, id, result)
+      }
+    } else {
+      fallbackRouting(am, id, result)
+    }
+  }
+
+  private fun fallbackRouting(am: AudioManager, deviceTypeOrId: String, result: Result) {
+    am.mode = AudioManager.MODE_IN_COMMUNICATION
+    try {
+      if (deviceTypeOrId.contains("speaker")) {
+        am.isSpeakerphoneOn = true
+        am.stopBluetoothSco()
+        am.isBluetoothScoOn = false
+        preferredDeviceType = "speaker"
+        log("Fallback: speakerphone enabled. preferredDeviceType set to: speaker")
+      } else if (deviceTypeOrId.contains("receiver") || deviceTypeOrId.contains("earpiece")) {
+        am.isSpeakerphoneOn = false
+        am.stopBluetoothSco()
+        am.isBluetoothScoOn = false
+        preferredDeviceType = "receiver"
+        log("Fallback: receiver enabled. preferredDeviceType set to: receiver")
+      } else if (deviceTypeOrId.contains("bluetooth")) {
+        am.isSpeakerphoneOn = false
+        am.startBluetoothSco()
+        am.isBluetoothScoOn = true
+        preferredDeviceType = "bluetooth"
+        log("Fallback: bluetooth SCO enabled. preferredDeviceType set to: bluetooth")
+      } else {
+        am.isSpeakerphoneOn = false
+        am.stopBluetoothSco()
+        am.isBluetoothScoOn = false
+        preferredDeviceType = null
+        log("Fallback: default route. preferredDeviceType cleared.")
+      }
+      result.success(null)
+      notifyDevicesChanged()
+    } catch (e: Exception) {
+      result.error("FALLBACK_ROUTE_ERROR", "Failed legacy audio route change: ${e.message}", null)
+    }
+  }
+
+  private fun setRouteByType(am: AudioManager, type: String, result: Result) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      val infoList = am.availableCommunicationDevices
+      val targetDevice = infoList.firstOrNull { mapDeviceType(it.type) == type }
+      
+      if (targetDevice != null) {
+        am.mode = AudioManager.MODE_IN_COMMUNICATION
+        val success = am.setCommunicationDevice(targetDevice)
+        if (success) {
+          preferredDeviceType = type
+          log("Successfully set communication device by type $type, preferredDeviceType set to: $preferredDeviceType")
+          result.success(null)
+          notifyDevicesChanged()
+          return
+        }
+      }
+    }
+    fallbackRouting(am, type, result)
+  }
+
+  private fun setRouteByName(am: AudioManager, name: String, result: Result) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      val infoList = am.availableCommunicationDevices
+      val targetDevice = infoList.firstOrNull { it.productName.toString().contains(name, ignoreCase = true) }
+      
+      if (targetDevice != null) {
+        am.mode = AudioManager.MODE_IN_COMMUNICATION
+        val success = am.setCommunicationDevice(targetDevice)
+        if (success) {
+          preferredDeviceType = mapDeviceType(targetDevice.type)
+          log("Successfully set communication device by name $name, preferredDeviceType set to: $preferredDeviceType")
+          result.success(null)
+          notifyDevicesChanged()
+          return
+        }
+      }
+    }
+    fallbackRouting(am, name, result)
+  }
+
+  private fun requestAudioFocus() {
+    val am = audioManager ?: return
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val focusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+          handleAudioFocusChange(focusChange)
+        }
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+          .setAudioAttributes(
+            AudioAttributes.Builder()
+              .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+              .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+              .build()
+          )
+          .setOnAudioFocusChangeListener(focusListener, handler)
+          .build()
+        
+        am.requestAudioFocus(request)
+        focusRequest = request
+      } else {
+        @Suppress("DEPRECATION")
+        am.requestAudioFocus(
+          { focusChange -> handleAudioFocusChange(focusChange) },
+          AudioManager.STREAM_VOICE_CALL,
+          AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+        )
+      }
+      log("Requested Audio Focus.")
+    } catch (e: Exception) {
+      log("Error requesting Audio Focus: ${e.message}")
+    }
+  }
+
+  private fun abandonAudioFocus() {
+    val am = audioManager ?: return
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        focusRequest?.let { am.abandonAudioFocusRequest(it) }
+      } else {
+        @Suppress("DEPRECATION")
+        am.abandonAudioFocus { }
+      }
+      log("Abandoned Audio Focus.")
+    } catch (e: Exception) {
+      log("Error abandoning Audio Focus: ${e.message}")
+    }
+  }
+
+  private fun handleAudioFocusChange(focusChange: Int) {
+    val sink = eventSink ?: return
+    val focused = focusChange == AudioManager.AUDIOFOCUS_GAIN
+    log("Audio focus change listener: $focusChange (focused=$focused)")
+    sink.success(mapOf("event" to "audio_focus_changed", "focused" to focused))
+  }
+
+  private fun mapDeviceType(nativeType: Int): String {
+    return when (nativeType) {
+      AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "speaker"
+      AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "receiver"
+      AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth"
+      AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "bluetooth"
+      AudioDeviceInfo.TYPE_BLE_HEADSET -> "bluetooth"
+      AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wiredHeadset"
+      AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wiredHeadset"
+      AudioDeviceInfo.TYPE_USB_DEVICE -> "usbAudio"
+      AudioDeviceInfo.TYPE_USB_ACCESSORY -> "usbAudio"
+      AudioDeviceInfo.TYPE_USB_HEADSET -> "usbAudio"
+      AudioDeviceInfo.TYPE_HDMI -> "hdmi"
+      AudioDeviceInfo.TYPE_HDMI_ARC -> "hdmi"
+      AudioDeviceInfo.TYPE_LINE_ANALOG -> "wiredHeadset"
+      else -> "unknown"
+    }
+  }
+}
