@@ -71,7 +71,13 @@ ${diffContent}
     fs.writeFileSync('gemini_review.md', reviewText);
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    process.exit(1);
+    // Write fallback content to avoid failing the workflow comment step
+    fs.writeFileSync(
+      'gemini_review.md', 
+      `### ⚠️ Gemini AI Code Review Unavailable\n\nThe review service was temporarily unable to analyze this diff (e.g., rate limits or high service demand).\n\n**Details:** \`${error.message}\``
+    );
+    // Exit with 0 so the build process is not blocked by a third-party API outage
+    process.exit(0);
   }
 }
 
