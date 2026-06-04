@@ -15,6 +15,20 @@ dependencies:
     path: ../
   cupertino_icons: ^1.0.8
 
+dependency_overrides:
+  voip_audio_route_manager:
+    path: ../
+  voip_audio_route_manager_platform_interface:
+    path: ../../voip_audio_route_manager_platform_interface
+  voip_audio_route_manager_android:
+    path: ../../voip_audio_route_manager_android
+  voip_audio_route_manager_ios:
+    path: ../../voip_audio_route_manager_ios
+  voip_audio_route_manager_macos:
+    path: ../../voip_audio_route_manager_macos
+  voip_audio_route_manager_web:
+    path: ../../voip_audio_route_manager_web
+
 dev_dependencies:
   integration_test:
     sdk: flutter

@@ -458,8 +458,9 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
       _mediaObserver = web.MutationObserver(
           (JSArray mutations, web.MutationObserver observer) {
         final currentId = _selectedDeviceId;
-        if (currentId == null || currentId == 'default' || currentId.isEmpty)
+        if (currentId == null || currentId == 'default' || currentId.isEmpty) {
           return;
+        }
 
         final list = mutations.toDart;
         for (var i = 0; i < list.length; i++) {

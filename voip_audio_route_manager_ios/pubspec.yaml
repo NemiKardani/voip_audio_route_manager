@@ -11,6 +11,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  voip_audio_route_manager_platform_interface: ^1.0.0
+
+dependency_overrides:
   voip_audio_route_manager_platform_interface:
     path: ../voip_audio_route_manager_platform_interface
 

@@ -11,6 +11,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  voip_audio_route_manager_platform_interface: ^1.0.0
+  voip_audio_route_manager_android: ^1.0.0
+  voip_audio_route_manager_ios: ^1.0.0
+  voip_audio_route_manager_macos: ^1.0.0
+  voip_audio_route_manager_web: ^1.0.0
+
+dependency_overrides:
   voip_audio_route_manager_platform_interface:
     path: ../voip_audio_route_manager_platform_interface
   voip_audio_route_manager_android:
