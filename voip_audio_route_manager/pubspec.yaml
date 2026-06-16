@@ -3,7 +3,6 @@ description: "VoIP Audio Route Manager: A production-ready Flutter package for a
 version: 1.1.0
 homepage: https://github.com/NemiKardani/voip_audio_route_manager
 repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager_platform_interface
-publish_to: none
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -14,16 +13,11 @@ dependencies:
     sdk: flutter
   
   # Using 'any' makes version resolution dynamic and avoids manual bumping when platform packages update.
-  voip_audio_route_manager_platform_interface:
-    path: ../voip_audio_route_manager_platform_interface
-  voip_audio_route_manager_android:
-    path: ../voip_audio_route_manager_android
-  voip_audio_route_manager_ios:
-    path: ../voip_audio_route_manager_ios
-  voip_audio_route_manager_macos:
-    path: ../voip_audio_route_manager_macos
-  voip_audio_route_manager_web:
-    path: ../voip_audio_route_manager_web
+  voip_audio_route_manager_platform_interface: any
+  voip_audio_route_manager_android: any
+  voip_audio_route_manager_ios: any
+  voip_audio_route_manager_macos: any
+  voip_audio_route_manager_web: any
 
 dependency_overrides:
   voip_audio_route_manager_platform_interface:
