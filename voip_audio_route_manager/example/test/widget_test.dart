@@ -2,7 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voip_audio_route_manager_example/main.dart';
 
 void main() {
-  testWidgets('Verify Example App UI builds and shows initialization button', (WidgetTester tester) async {
+  testWidgets('Verify Example App UI builds and shows initialization button',
+      (WidgetTester tester) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const MyApp());
 

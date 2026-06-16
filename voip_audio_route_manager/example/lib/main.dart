@@ -47,11 +47,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final _manager = VoipAudioRouteManager.instance;
   List<AudioOutputDevice> _devices = [];
   AudioOutputDevice? _currentRoute;
-  
+
   bool _initialized = false;
   bool _audioFocus = false;
   bool _isCallActive = false;
-  
+
   final List<String> _consoleLogs = [];
   final _logScrollController = ScrollController();
   final List<StreamSubscription> _subscriptions = [];
@@ -77,7 +77,8 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _devices = devices;
           });
-          _addLog('Devices Stream: Received ${devices.length} available devices.');
+          _addLog(
+              'Devices Stream: Received ${devices.length} available devices.');
         }),
         // Emitted when the active audio output route changes (e.g. bluetooth connected/selected).
         _manager.onRouteChanged.listen((route) {
@@ -134,14 +135,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Starts a VoIP call audio session. 
-  /// 
-  /// This requests system audio focus and configures the platform's audio mode 
+  /// Starts a VoIP call audio session.
+  ///
+  /// This requests system audio focus and configures the platform's audio mode
   /// (e.g., MODE_IN_COMMUNICATION on Android, Voip/PlayAndRecord on iOS) for high-quality
   /// hardware AEC (Acoustic Echo Cancellation) and appropriate routing.
   Future<void> _startCallSession() async {
     try {
-      _addLog('Starting VoIP call session (requesting focus & communication mode)...');
+      _addLog(
+          'Starting VoIP call session (requesting focus & communication mode)...');
       await _manager.startCallSession();
       setState(() {
         _isCallActive = true;
@@ -153,12 +155,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Ends the VoIP call audio session.
-  /// 
-  /// This releases the system audio focus and reverts the communication mode back to 
+  ///
+  /// This releases the system audio focus and reverts the communication mode back to
   /// normal, allowing other apps to request audio focus.
   Future<void> _endCallSession() async {
     try {
-      _addLog('Ending VoIP call session (releasing focus & communication mode)...');
+      _addLog(
+          'Ending VoIP call session (releasing focus & communication mode)...');
       await _manager.endCallSession();
       setState(() {
         _isCallActive = false;
@@ -205,11 +208,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Helper to display and log the detailed output of an AudioRouteResult.
   void _processRouteResult(AudioRouteResult result) {
-    _addLog(
-      'Result: success=${result.success}, status=${result.status.name}, '
-      'message="${result.message ?? "N/A"}"'
-    );
-    
+    _addLog('Result: success=${result.success}, status=${result.status.name}, '
+        'message="${result.message ?? "N/A"}"');
+
     if (!mounted) return;
 
     final theme = Theme.of(context);
@@ -239,7 +240,8 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Text(
                 result.message ?? 'Routing status: ${result.status.name}',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -255,12 +257,13 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _consoleLogs.add('[$time] $msg');
     });
-    
+
     // Auto-scroll to bottom of the console
     _scrollTimer?.cancel();
     _scrollTimer = Timer(const Duration(milliseconds: 100), () {
       if (_logScrollController.hasClients) {
-        _logScrollController.jumpTo(_logScrollController.position.maxScrollExtent);
+        _logScrollController
+            .jumpTo(_logScrollController.position.maxScrollExtent);
       }
     });
   }
@@ -336,7 +339,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 16),
                         const Text(
                           'Setup Platform Audio Routing',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         const Text(
@@ -349,11 +353,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: theme.colorScheme.primary,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
                           icon: const Icon(Icons.bolt_rounded),
-                          label: const Text('Initialize Manager', style: TextStyle(fontWeight: FontWeight.bold)),
+                          label: const Text('Initialize Manager',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
                           onPressed: _initializeManager,
                         ),
                       ],
@@ -380,7 +387,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: _isCallActive
                                     ? theme.colorScheme.secondary.withAlpha(51)
@@ -393,17 +401,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                     width: 8,
                                     height: 8,
                                     decoration: BoxDecoration(
-                                      color: _isCallActive ? theme.colorScheme.secondary : Colors.grey,
+                                      color: _isCallActive
+                                          ? theme.colorScheme.secondary
+                                          : Colors.grey,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    _isCallActive ? 'ACTIVE CALL' : 'IDLE / OFF',
+                                    _isCallActive
+                                        ? 'ACTIVE CALL'
+                                        : 'IDLE / OFF',
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: _isCallActive ? theme.colorScheme.secondary : Colors.grey,
+                                      color: _isCallActive
+                                          ? theme.colorScheme.secondary
+                                          : Colors.grey,
                                     ),
                                   ),
                                 ],
@@ -419,11 +433,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: theme.colorScheme.secondary,
                                   foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
                                 ),
                                 icon: const Icon(Icons.call_rounded),
-                                label: const Text('Start Call', style: TextStyle(fontWeight: FontWeight.bold)),
-                                onPressed: _isCallActive ? null : _startCallSession,
+                                label: const Text('Start Call',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold)),
+                                onPressed:
+                                    _isCallActive ? null : _startCallSession,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -431,12 +449,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: OutlinedButton.icon(
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: theme.colorScheme.error,
-                                  side: BorderSide(color: theme.colorScheme.error),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  side: BorderSide(
+                                      color: theme.colorScheme.error),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
                                 ),
                                 icon: const Icon(Icons.call_end_rounded),
-                                label: const Text('End Call', style: TextStyle(fontWeight: FontWeight.bold)),
-                                onPressed: _isCallActive ? _endCallSession : null,
+                                label: const Text('End Call',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold)),
+                                onPressed:
+                                    _isCallActive ? _endCallSession : null,
                               ),
                             ),
                           ],
@@ -469,21 +492,28 @@ class _HomeScreenState extends State<HomeScreen> {
                               if (_currentRoute != null)
                                 Row(
                                   children: [
-                                    Icon(_getDeviceIcon(_currentRoute!.type), size: 28, color: Colors.white),
+                                    Icon(_getDeviceIcon(_currentRoute!.type),
+                                        size: 28, color: Colors.white),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             _currentRoute!.name,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                           Text(
-                                            _currentRoute!.type.name.toUpperCase(),
-                                            style: const TextStyle(color: Colors.white54, fontSize: 10),
+                                            _currentRoute!.type.name
+                                                .toUpperCase(),
+                                            style: const TextStyle(
+                                                color: Colors.white54,
+                                                fontSize: 10),
                                           ),
                                         ],
                                       ),
@@ -491,7 +521,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ],
                                 )
                               else
-                                const Text('No active route', style: TextStyle(color: Colors.white38)),
+                                const Text('No active route',
+                                    style: TextStyle(color: Colors.white38)),
                             ],
                           ),
                         ),
@@ -500,17 +531,25 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(width: 12),
                     Card(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 16.0),
                         child: Column(
                           children: [
                             const Text(
                               'AUDIO FOCUS',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70),
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white70),
                             ),
                             const SizedBox(height: 10),
                             Icon(
-                              _audioFocus ? Icons.lock_rounded : Icons.lock_open_rounded,
-                              color: _audioFocus ? theme.colorScheme.secondary : Colors.white24,
+                              _audioFocus
+                                  ? Icons.lock_rounded
+                                  : Icons.lock_open_rounded,
+                              color: _audioFocus
+                                  ? theme.colorScheme.secondary
+                                  : Colors.white24,
                               size: 26,
                             ),
                           ],
@@ -526,24 +565,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   Card(
                     color: const Color(0xFF1E293B),
                     shape: RoundedRectangleBorder(
-                      side: BorderSide(color: theme.colorScheme.primary.withAlpha(128)),
+                      side: BorderSide(
+                          color: theme.colorScheme.primary.withAlpha(128)),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(12.0),
                       child: Row(
                         children: [
-                          const Icon(Icons.info_outline_rounded, color: Colors.amber),
+                          const Icon(Icons.info_outline_rounded,
+                              color: Colors.amber),
                           const SizedBox(width: 10),
                           const Expanded(
                             child: Text(
                               'Browsers restrict device details and names until microphone permissions are granted.',
-                              style: TextStyle(fontSize: 11, color: Colors.white70),
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.white70),
                             ),
                           ),
                           TextButton(
                             onPressed: () async {
-                              _addLog('Requesting mic permissions (Web only)...');
+                              _addLog(
+                                  'Requesting mic permissions (Web only)...');
                               final ok = await _manager.requestPermissions();
                               _addLog('Mic permission response: $ok');
                               await _refreshRoute();
@@ -554,7 +597,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             onPressed: () async {
                               final prefId = _currentRoute?.id;
                               _addLog('Opening W3C audio selector...');
-                              final device = await _manager.selectAudioOutput(deviceId: prefId);
+                              final device = await _manager.selectAudioOutput(
+                                  deviceId: prefId);
                               if (device != null) {
                                 _addLog('W3C Device selected: ${device.name}');
                                 await _refreshRoute();
@@ -575,7 +619,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     Text(
                       'AVAILABLE DEVICES (${_devices.length})',
-                      style: theme.textTheme.titleSmall?.copyWith(color: Colors.white70, letterSpacing: 1.1),
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(color: Colors.white70, letterSpacing: 1.1),
                     ),
                     if (_currentRoute != null)
                       TextButton.icon(
@@ -585,8 +630,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           minimumSize: const Size(50, 30),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        icon: const Icon(Icons.settings_backup_restore_rounded, size: 16),
-                        label: const Text('Clear Override', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        icon: const Icon(Icons.settings_backup_restore_rounded,
+                            size: 16),
+                        label: const Text('Clear Override',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.bold)),
                         onPressed: _clearExplicitRoute,
                       ),
                   ],
@@ -617,48 +665,65 @@ class _HomeScreenState extends State<HomeScreen> {
                       final isSelected = device.isSelected;
 
                       return Card(
-                        color: isSelected ? theme.colorScheme.primary.withAlpha(38) : null,
+                        color: isSelected
+                            ? theme.colorScheme.primary.withAlpha(38)
+                            : null,
                         shape: RoundedRectangleBorder(
                           side: BorderSide(
-                            color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.transparent,
                             width: 1.5,
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 4),
                           leading: Icon(
                             _getDeviceIcon(device.type),
-                            color: isSelected ? theme.colorScheme.primary : Colors.white70,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.white70,
                           ),
                           title: Text(
                             device.name,
                             style: TextStyle(
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                           subtitle: Text(
                             device.type.name.toUpperCase(),
-                            style: const TextStyle(fontSize: 10, color: Colors.white54),
+                            style: const TextStyle(
+                                fontSize: 10, color: Colors.white54),
                           ),
                           trailing: isSelected
                               ? Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: theme.colorScheme.primary,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Text(
                                     'ACTIVE',
-                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white),
                                   ),
                                 )
                               : OutlinedButton(
                                   style: OutlinedButton.styleFrom(
-                                    side: BorderSide(color: theme.colorScheme.primary),
+                                    side: BorderSide(
+                                        color: theme.colorScheme.primary),
                                     foregroundColor: theme.colorScheme.primary,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16),
                                   ),
                                   onPressed: () => _selectDeviceRoute(device),
                                   child: const Text('SWITCH'),
@@ -677,11 +742,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       _buildShortcutButton('Speaker', AudioOutputType.speaker),
                       const SizedBox(width: 8),
-                      _buildShortcutButton('Earpiece', AudioOutputType.receiver),
+                      _buildShortcutButton(
+                          'Earpiece', AudioOutputType.receiver),
                       const SizedBox(width: 8),
-                      _buildShortcutButton('Bluetooth', AudioOutputType.bluetooth),
+                      _buildShortcutButton(
+                          'Bluetooth', AudioOutputType.bluetooth),
                       const SizedBox(width: 8),
-                      _buildShortcutButton('Headset', AudioOutputType.wiredHeadset),
+                      _buildShortcutButton(
+                          'Headset', AudioOutputType.wiredHeadset),
                     ],
                   ),
                 ),
@@ -691,7 +759,8 @@ class _HomeScreenState extends State<HomeScreen> {
               // Console Debug Logs
               Text(
                 'LIVE EVENTS & DEBUG LOGS',
-                style: theme.textTheme.titleSmall?.copyWith(color: Colors.white70, letterSpacing: 1.1),
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(color: Colors.white70, letterSpacing: 1.1),
               ),
               const SizedBox(height: 6),
               Expanded(
