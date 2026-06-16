@@ -1,0 +1,64 @@
+name: Sanity Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  sanity-checks:
+    name: ${{ matrix.package-name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package-name: 'Android Package'
+            path: 'voip_audio_route_manager_android'
+          - package-name: 'iOS Package'
+            path: 'voip_audio_route_manager_ios'
+          - package-name: 'Web Package'
+            path: 'voip_audio_route_manager_web'
+          - package-name: 'macOS Package'
+            path: 'voip_audio_route_manager_macos'
+          - package-name: 'Platform Interface'
+            path: 'voip_audio_route_manager_platform_interface'
+          - package-name: 'Core & Example'
+            path: 'voip_audio_route_manager'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '25'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get dependencies
+        working-directory: ${{ matrix.path }}
+        run: flutter pub get
+
+      - name: Verify Formatting
+        working-directory: ${{ matrix.path }}
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Run Static Analysis
+        working-directory: ${{ matrix.path }}
+        run: flutter analyze
+
+      - name: Run Unit & Widget Tests
+        working-directory: ${{ matrix.path }}
+        run: |
+          if [ -d "test" ]; then
+            flutter test
+          else
+            echo "No test/ directory found. Skipping tests."
+          fi

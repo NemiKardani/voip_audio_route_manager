@@ -1,0 +1,21 @@
+releases:
+  - package_name: voip_audio_route_manager
+    version: 1.1.0
+    commit_id: "7b77450"
+    changes:
+      - "Adds VoIP call session lifecycle APIs: startCallSession() and endCallSession()."
+      - "Adds selectAudioRoute, selectAudioRouteType, selectAudioRouteByName, and clearAudioRoute."
+      - "Updates the example application with clean controls and developer explanations."
+
+  - package_name: voip_audio_route_manager_platform_interface
+    version: 1.1.0
+    commit_id: "7b77450"
+    changes:
+      - "Adds startCallSession, endCallSession, selectAudioRoute, and clearAudioRoute to interface."
+
+  - package_name: voip_audio_route_manager_android
+    version: 1.1.0
+    commit_id: "7b77450"
+    changes:
+      - "Implements VoIP call session starting and ending on Android."
+      - "Implements AudioRouteResult on Android."

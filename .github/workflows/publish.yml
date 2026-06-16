@@ -1,0 +1,146 @@
+name: Publish to Pub.dev
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '*/*'
+      - '*@*'
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'Package to publish'
+        required: true
+        default: 'all_listed_in_changelog'
+        type: choice
+        options:
+          - 'all_listed_in_changelog'
+          - 'voip_audio_route_manager'
+          - 'voip_audio_route_manager_android'
+          - 'voip_audio_route_manager_ios'
+          - 'voip_audio_route_manager_macos'
+          - 'voip_audio_route_manager_web'
+          - 'voip_audio_route_manager_platform_interface'
+      version_name:
+        description: 'Version name (e.g. 1.1.0)'
+        required: true
+      commit_id:
+        description: 'Commit ID / Ref to build'
+        required: true
+        default: 'main'
+      changes:
+        description: 'Release changes/notes'
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  dry-run:
+    name: Dry-Run Verification
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.determine-target.outputs.packages }}
+      version: ${{ steps.determine-target.outputs.version }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_id || github.ref }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Determine Target Packages
+        id: determine-target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PACKAGE="${{ github.event.inputs.package_name }}"
+            VERSION="${{ github.event.inputs.version_name }}"
+          else
+            TAG_NAME="${{ github.ref_name }}"
+            # If tag is like: voip_audio_route_manager-v1.1.0
+            if [[ "$TAG_NAME" =~ ^(.+)-v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+              PACKAGE="${BASH_REMATCH[1]}"
+              VERSION="${BASH_REMATCH[2]}"
+            else
+              # Fallback: Parse changelog.yaml for generic version tag (e.g. v1.1.0)
+              PACKAGE="all_listed_in_changelog"
+              # Strip leading 'v' if present
+              if [[ "$TAG_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+                VERSION="${BASH_REMATCH[1]}"
+              else
+                VERSION="$TAG_NAME"
+              fi
+            fi
+          fi
+          
+          if [ "$PACKAGE" = "all_listed_in_changelog" ]; then
+            echo "Parsing changelog.yaml for packages matching version $VERSION..."
+            # Extract all package names for the version
+            PACKAGES=$(python3 -c "import yaml; data=yaml.safe_load(open('changelog.yaml')); print(','.join([r['package_name'] for r in data.get('releases', []) if str(r.get('version')) == '$VERSION']))")
+          else
+            PACKAGES="$PACKAGE"
+          fi
+          
+          if [ -z "$PACKAGES" ]; then
+            echo "Error: No packages found to publish!"
+            exit 1
+          fi
+          
+          echo "Target packages: $PACKAGES"
+          echo "Target version: $VERSION"
+          echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Dry-Run Publication
+        run: |
+          IFS=',' read -ra ADDR <<< "${{ steps.determine-target.outputs.packages }}"
+          for pkg in "${ADDR[@]}"; do
+            echo "=== Dry-run verifying package: $pkg ==="
+            cd "$GITHUB_WORKSPACE/$pkg"
+            flutter pub get
+            flutter pub publish --dry-run
+          done
+
+  verify-and-publish:
+    name: Verify & Publish
+    needs: dry-run
+    runs-on: ubuntu-latest
+    # Requires manual verification from environment reviewers before starting
+    environment: pub.dev-publishing
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_id || github.ref }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Publish Packages to Pub.dev (OIDC)
+        run: |
+          IFS=',' read -ra ADDR <<< "${{ needs.dry-run.outputs.packages }}"
+          for pkg in "${ADDR[@]}"; do
+            echo "=== Publishing package: $pkg ==="
+            cd "$GITHUB_WORKSPACE/$pkg"
+            flutter pub get
+            flutter pub publish --force
+          done
