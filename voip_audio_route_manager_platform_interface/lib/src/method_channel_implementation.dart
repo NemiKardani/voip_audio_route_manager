@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'audio_device_model.dart';
+import 'audio_route_result.dart';
 import 'platform_interface.dart';
 
 /// An implementation of [VoipAudioRouteManagerPlatform] that uses method channels.
@@ -23,6 +24,16 @@ class MethodChannelVoipAudioRouteManager extends VoipAudioRouteManagerPlatform {
     await _methodChannel.invokeMethod('initialize', {
       'enableLogs': enableLogs,
     });
+  }
+
+  @override
+  Future<void> startCallSession() async {
+    await _methodChannel.invokeMethod('startCallSession');
+  }
+
+  @override
+  Future<void> endCallSession() async {
+    await _methodChannel.invokeMethod('endCallSession');
   }
 
   @override
@@ -56,6 +67,41 @@ class MethodChannelVoipAudioRouteManager extends VoipAudioRouteManagerPlatform {
   @override
   Future<void> setAudioRouteByName(String name) async {
     await _methodChannel.invokeMethod('setAudioRouteByName', {'name': name});
+  }
+
+  @override
+  Future<AudioRouteResult> selectAudioRoute(String id) async {
+    final result = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+      'selectAudioRoute',
+      {'id': id},
+    );
+    return AudioRouteResult.fromMap(result ?? const {});
+  }
+
+  @override
+  Future<AudioRouteResult> selectAudioRouteType(String type) async {
+    final result = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+      'selectAudioRouteType',
+      {'type': type},
+    );
+    return AudioRouteResult.fromMap(result ?? const {});
+  }
+
+  @override
+  Future<AudioRouteResult> selectAudioRouteByName(String name) async {
+    final result = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+      'selectAudioRouteByName',
+      {'name': name},
+    );
+    return AudioRouteResult.fromMap(result ?? const {});
+  }
+
+  @override
+  Future<AudioRouteResult> clearAudioRoute() async {
+    final result = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
+      'clearAudioRoute',
+    );
+    return AudioRouteResult.fromMap(result ?? const {});
   }
 
   @override

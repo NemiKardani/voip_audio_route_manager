@@ -3,7 +3,7 @@ import 'package:voip_audio_route_manager_platform_interface/voip_audio_route_man
 import 'src/logger.dart';
 
 export 'package:voip_audio_route_manager_platform_interface/voip_audio_route_manager_platform_interface.dart'
-    show AudioOutputDevice, AudioOutputType;
+    show AudioOutputDevice, AudioOutputType, AudioRouteResult, AudioRouteStatus;
 
 /// Advanced audio output routing manager for VoIP applications.
 class VoipAudioRouteManager {
@@ -24,6 +24,18 @@ class VoipAudioRouteManager {
       VoipAudioLogger.log('Initialization failed: $e');
       rethrow;
     }
+  }
+
+  /// Activates platform audio state for a live VoIP call.
+  Future<void> startCallSession() async {
+    VoipAudioLogger.log('Starting VoIP call audio session...');
+    await VoipAudioRouteManagerPlatform.instance.startCallSession();
+  }
+
+  /// Ends the VoIP call audio session and releases focus/route requests.
+  Future<void> endCallSession() async {
+    VoipAudioLogger.log('Ending VoIP call audio session...');
+    await VoipAudioRouteManagerPlatform.instance.endCallSession();
   }
 
   /// Returns the list of currently available audio output devices.
@@ -66,6 +78,51 @@ class VoipAudioRouteManager {
   Future<void> setAudioRouteByName(String name) async {
     VoipAudioLogger.log('Setting audio route by name: $name');
     await VoipAudioRouteManagerPlatform.instance.setAudioRouteByName(name);
+  }
+
+  /// Sets the active audio output route and returns the platform result.
+  Future<AudioRouteResult> selectAudioRoute(AudioOutputDevice device) async {
+    VoipAudioLogger.log('Selecting audio route with result: $device');
+    final result = await VoipAudioRouteManagerPlatform.instance
+        .selectAudioRoute(device.id);
+    VoipAudioLogger.log('Audio route selection result: $result');
+    return result;
+  }
+
+  /// Sets the active audio output route by ID and returns the platform result.
+  Future<AudioRouteResult> selectAudioRouteById(String id) async {
+    VoipAudioLogger.log('Selecting audio route by ID with result: $id');
+    final result =
+        await VoipAudioRouteManagerPlatform.instance.selectAudioRoute(id);
+    VoipAudioLogger.log('Audio route selection result: $result');
+    return result;
+  }
+
+  /// Sets the active audio output route by type and returns the platform result.
+  Future<AudioRouteResult> selectAudioRouteType(AudioOutputType type) async {
+    VoipAudioLogger.log('Selecting audio route type with result: ${type.name}');
+    final result = await VoipAudioRouteManagerPlatform.instance
+        .selectAudioRouteType(type.name);
+    VoipAudioLogger.log('Audio route selection result: $result');
+    return result;
+  }
+
+  /// Sets the active audio output route by name and returns the platform result.
+  Future<AudioRouteResult> selectAudioRouteByName(String name) async {
+    VoipAudioLogger.log('Selecting audio route by name with result: $name');
+    final result = await VoipAudioRouteManagerPlatform.instance
+        .selectAudioRouteByName(name);
+    VoipAudioLogger.log('Audio route selection result: $result');
+    return result;
+  }
+
+  /// Clears any explicit route request and returns to platform default routing.
+  Future<AudioRouteResult> clearAudioRoute() async {
+    VoipAudioLogger.log('Clearing requested audio route...');
+    final result =
+        await VoipAudioRouteManagerPlatform.instance.clearAudioRoute();
+    VoipAudioLogger.log('Clear audio route result: $result');
+    return result;
   }
 
   /// Emits updates containing the full list of available devices (including selection status).

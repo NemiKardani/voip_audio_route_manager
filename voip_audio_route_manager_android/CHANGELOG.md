@@ -1,3 +1,8 @@
+## Unreleased
+
+* Adds native call session lifecycle handling for Android voice communication mode and audio focus.
+* Adds verified route selection results and explicit route clearing via `clearCommunicationDevice()` on Android 12+.
+
 ## 1.0.0
 
 * Initial stable release of the Android implementation package.

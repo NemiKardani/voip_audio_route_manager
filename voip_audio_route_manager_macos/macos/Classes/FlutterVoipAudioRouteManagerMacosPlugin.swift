@@ -6,6 +6,13 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
   private var eventSink: FlutterEventSink?
   private var enableLogs: Bool = false
   private var isListening = false
+
+  private struct RouteAttempt {
+    let success: Bool
+    let status: String
+    let message: String?
+    let errorCode: String?
+  }
   
   private var defaultOutputAddress = AudioObjectPropertyAddress(
     mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -40,6 +47,10 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
       result(getAvailableDevices())
     case "currentAudioRoute":
       result(getCurrentAudioRoute())
+    case "startCallSession":
+      result(nil)
+    case "endCallSession":
+      result(nil)
     case "setAudioRoute":
       if let args = call.arguments as? [String: Any],
          let deviceIdStr = args["id"] as? String,
@@ -62,6 +73,37 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
       } else {
         result(FlutterError(code: "INVALID_ARGUMENTS", message: "Name required", details: nil))
       }
+    case "selectAudioRoute":
+      if let args = call.arguments as? [String: Any],
+         let deviceIdStr = args["id"] as? String,
+         let deviceId = UInt32(deviceIdStr) {
+        selectAudioRoute(deviceID: deviceId, result: result)
+      } else {
+        result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "Device ID required", errorCode: "INVALID_ARGUMENTS"))
+      }
+    case "selectAudioRouteType":
+      if let args = call.arguments as? [String: Any],
+         let typeStr = args["type"] as? String {
+        selectRouteByType(typeStr: typeStr, result: result)
+      } else {
+        result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "Type required", errorCode: "INVALID_ARGUMENTS"))
+      }
+    case "selectAudioRouteByName":
+      if let args = call.arguments as? [String: Any],
+         let name = args["name"] as? String {
+        selectRouteByName(name: name, result: result)
+      } else {
+        result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "Name required", errorCode: "INVALID_ARGUMENTS"))
+      }
+    case "clearAudioRoute":
+      result(routeResult(
+        success: false,
+        status: "unsupported",
+        requestedDevice: nil,
+        actualDevice: getCurrentAudioRoute(),
+        message: "macOS output routing is system-default based; there is no app-scoped route request to clear.",
+        errorCode: "UNSUPPORTED_OPERATION"
+      ))
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -125,6 +167,15 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
   }
 
   private func setDefaultOutputDevice(deviceID: AudioDeviceID, result: FlutterResult) {
+    let attempt = applyDefaultOutputDevice(deviceID: deviceID)
+    if attempt.success {
+      result(nil)
+    } else {
+      result(FlutterError(code: attempt.errorCode ?? "COREAUDIO_ERROR", message: attempt.message, details: nil))
+    }
+  }
+
+  private func applyDefaultOutputDevice(deviceID: AudioDeviceID) -> RouteAttempt {
     var devId = deviceID
     var propertyAddress = AudioObjectPropertyAddress(
       mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -143,9 +194,10 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     
     if status == noErr {
       log("Successfully set default output device: \(deviceID)")
-      result(nil)
+      notifyDevicesChanged()
+      return RouteAttempt(success: true, status: "success", message: "Default output device changed successfully.", errorCode: nil)
     } else {
-      result(FlutterError(code: "COREAUDIO_ERROR", message: "Failed to set default output device, status: \(status)", details: nil))
+      return RouteAttempt(success: false, status: "error", message: "Failed to set default output device, status: \(status)", errorCode: "COREAUDIO_ERROR")
     }
   }
 
@@ -169,6 +221,70 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     } else {
       result(FlutterError(code: "DEVICE_NOT_FOUND", message: "No device matching name \(name)", details: nil))
     }
+  }
+
+  private func selectAudioRoute(deviceID: AudioDeviceID, result: FlutterResult) {
+    let requested = getAvailableDevices().first { ($0["id"] as? String) == String(deviceID) }
+    guard let requestedDevice = requested else {
+      result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "No audio output device matched the requested ID.", errorCode: nil))
+      return
+    }
+
+    let attempt = applyDefaultOutputDevice(deviceID: deviceID)
+    result(routeResult(success: attempt.success, status: attempt.status, requestedDevice: requestedDevice, actualDevice: getCurrentAudioRoute(), message: attempt.message, errorCode: attempt.errorCode))
+  }
+
+  private func selectRouteByType(typeStr: String, result: FlutterResult) {
+    let requested = getAvailableDevices().first { ($0["type"] as? String) == typeStr }
+    guard let requestedDevice = requested,
+          let idStr = requestedDevice["id"] as? String,
+          let deviceID = UInt32(idStr) else {
+      result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "No audio output device matched type \(typeStr).", errorCode: nil))
+      return
+    }
+
+    let attempt = applyDefaultOutputDevice(deviceID: deviceID)
+    result(routeResult(success: attempt.success, status: attempt.status, requestedDevice: requestedDevice, actualDevice: getCurrentAudioRoute(), message: attempt.message, errorCode: attempt.errorCode))
+  }
+
+  private func selectRouteByName(name: String, result: FlutterResult) {
+    let requested = getAvailableDevices().first { ($0["name"] as? String)?.localizedCaseInsensitiveContains(name) ?? false }
+    guard let requestedDevice = requested,
+          let idStr = requestedDevice["id"] as? String,
+          let deviceID = UInt32(idStr) else {
+      result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "No audio output device matched name \(name).", errorCode: nil))
+      return
+    }
+
+    let attempt = applyDefaultOutputDevice(deviceID: deviceID)
+    result(routeResult(success: attempt.success, status: attempt.status, requestedDevice: requestedDevice, actualDevice: getCurrentAudioRoute(), message: attempt.message, errorCode: attempt.errorCode))
+  }
+
+  private func routeResult(
+    success: Bool,
+    status: String,
+    requestedDevice: [String: Any]?,
+    actualDevice: [String: Any]?,
+    message: String?,
+    errorCode: String?
+  ) -> [String: Any] {
+    var result: [String: Any] = [
+      "success": success,
+      "status": status
+    ]
+    if let requestedDevice = requestedDevice {
+      result["requestedDevice"] = requestedDevice
+    }
+    if let actualDevice = actualDevice {
+      result["actualDevice"] = actualDevice
+    }
+    if let message = message {
+      result["message"] = message
+    }
+    if let errorCode = errorCode {
+      result["errorCode"] = errorCode
+    }
+    return result
   }
 
   private func getAllDeviceIDs() -> [AudioDeviceID] {

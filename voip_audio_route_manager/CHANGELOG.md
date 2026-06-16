@@ -1,3 +1,9 @@
+## Unreleased
+
+* Adds VoIP call session lifecycle APIs: `startCallSession()` and `endCallSession()`.
+* Adds verified route selection APIs returning `AudioRouteResult`.
+* Adds `clearAudioRoute()` to release explicit route requests where supported.
+
 ## 1.0.0
 
 * Initial stable, production-ready release of `voip_audio_route_manager`.

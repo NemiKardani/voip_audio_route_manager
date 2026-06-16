@@ -52,6 +52,16 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
     await _updateDevices();
   }
 
+  @override
+  Future<void> startCallSession() async {
+    await _updateDevices();
+  }
+
+  @override
+  Future<void> endCallSession() async {
+    await clearAudioRoute();
+  }
+
   web.MediaDevices? _getMediaDevices() {
     try {
       return web.window.navigator.mediaDevices;
@@ -216,9 +226,11 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
     final match = list.firstWhere((d) => d.id == id, orElse: () => list.first);
     _selectedDeviceId = match.id;
     _routeChangedStreamController.add(match.copyWith(isSelected: true));
-    if (_selectedDeviceId != null &&
-        _selectedDeviceId != 'default' &&
-        _selectedDeviceId!.isNotEmpty) {
+    if (_selectedDeviceId == null ||
+        _selectedDeviceId == 'default' ||
+        _selectedDeviceId!.isEmpty) {
+      _applySinkIdToAllMediaElements('');
+    } else {
       _applySinkIdToAllMediaElements(_selectedDeviceId!);
     }
     await _updateDevices();
@@ -242,6 +254,92 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
       orElse: () => list.first,
     );
     await setAudioRoute(match.id);
+  }
+
+  @override
+  Future<AudioRouteResult> selectAudioRoute(String id) async {
+    final list = await availableDevices();
+    final requested = list.cast<AudioOutputDevice?>().firstWhere(
+          (device) => device?.id == id,
+          orElse: () => null,
+        );
+
+    if (requested == null) {
+      return const AudioRouteResult(
+        success: false,
+        status: AudioRouteStatus.notFound,
+        message: 'No audio output device matched the requested ID.',
+      );
+    }
+
+    await setAudioRoute(requested.id);
+    final actual = await currentAudioRoute();
+    final success = actual?.id == requested.id;
+    return AudioRouteResult(
+      success: success,
+      status: success ? AudioRouteStatus.success : AudioRouteStatus.pending,
+      requestedDevice: requested,
+      actualDevice: actual,
+      message: success
+          ? 'Audio route changed successfully.'
+          : 'The browser accepted the request, but the active sink is pending.',
+    );
+  }
+
+  @override
+  Future<AudioRouteResult> selectAudioRouteType(String type) async {
+    final list = await availableDevices();
+    final requested = list.cast<AudioOutputDevice?>().firstWhere(
+          (device) => device?.type.name == type,
+          orElse: () => null,
+        );
+
+    if (requested == null) {
+      return AudioRouteResult(
+        success: false,
+        status: AudioRouteStatus.notFound,
+        message: 'No audio output device matched type $type.',
+      );
+    }
+
+    return selectAudioRoute(requested.id);
+  }
+
+  @override
+  Future<AudioRouteResult> selectAudioRouteByName(String name) async {
+    final list = await availableDevices();
+    final requested = list.cast<AudioOutputDevice?>().firstWhere(
+          (device) =>
+              device?.name.toLowerCase().contains(name.toLowerCase()) == true,
+          orElse: () => null,
+        );
+
+    if (requested == null) {
+      return AudioRouteResult(
+        success: false,
+        status: AudioRouteStatus.notFound,
+        message: 'No audio output device matched name $name.',
+      );
+    }
+
+    return selectAudioRoute(requested.id);
+  }
+
+  @override
+  Future<AudioRouteResult> clearAudioRoute() async {
+    _selectedDeviceId = null;
+    _applySinkIdToAllMediaElements('');
+    await _updateDevices();
+    final actual = await currentAudioRoute();
+    if (actual != null) {
+      _routeChangedStreamController.add(actual);
+    }
+    return AudioRouteResult(
+      success: true,
+      status: AudioRouteStatus.cleared,
+      actualDevice: actual,
+      message: 'Audio output route returned to the browser default.',
+    );
   }
 
   @override
@@ -447,7 +545,8 @@ class FlutterVoipAudioRouteManagerWeb extends VoipAudioRouteManagerPlatform {
   void _applySinkIdToElement(JSObject element, String deviceId) {
     try {
       if (element.hasProperty('setSinkId'.toJS).toDart) {
-        element.callMethod<JSPromise?>('setSinkId'.toJS, deviceId.toJS);
+        final targetId = deviceId == 'default' ? '' : deviceId;
+        element.callMethod<JSPromise?>('setSinkId'.toJS, targetId.toJS);
       }
     } catch (_) {}
   }

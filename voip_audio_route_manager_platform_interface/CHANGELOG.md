@@ -1,3 +1,8 @@
+## Unreleased
+
+* Adds `AudioRouteResult` and `AudioRouteStatus`.
+* Adds call session lifecycle and verified route selection methods to the platform interface.
+
 ## 1.0.0
 
 * Initial stable release of the platform interface package.

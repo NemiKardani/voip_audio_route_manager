@@ -85,6 +85,12 @@ final manager = VoipAudioRouteManager.instance;
 
 // Optional: Enable logs in debug mode
 await manager.initialize(enableLogs: true);
+
+// Activate native VoIP audio mode/focus when a call starts
+await manager.startCallSession();
+
+// Release route/focus requests when the call ends
+await manager.endCallSession();
 ```
 
 ### Fetch Devices & Current Route
@@ -127,6 +133,20 @@ await manager.setAudioRouteType(AudioOutputType.speaker);
 
 // Switch by name (matches substring case-insensitively)
 await manager.setAudioRouteByName("AirPods Pro");
+```
+
+### Verified Route Switching
+```dart
+// Returns requested route, actual route, status, and diagnostics.
+final AudioRouteResult result =
+    await manager.selectAudioRouteType(AudioOutputType.speaker);
+
+if (!result.success) {
+  print("Route failed: ${result.status} ${result.message}");
+}
+
+// Clear explicit routing and return to platform default behavior.
+await manager.clearAudioRoute();
 ```
 
 ---

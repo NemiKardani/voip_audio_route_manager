@@ -61,4 +61,50 @@ void main() {
       expect(dev1, isNot(dev3));
     });
   });
+
+  group('AudioRouteResult tests', () {
+    test('serialization and deserialization from map works', () {
+      const requested = AudioOutputDevice(
+        id: 'speaker',
+        name: 'Speaker',
+        type: AudioOutputType.speaker,
+        isSelected: false,
+      );
+      const actual = AudioOutputDevice(
+        id: 'speaker',
+        name: 'Speaker',
+        type: AudioOutputType.speaker,
+        isSelected: true,
+      );
+      const result = AudioRouteResult(
+        success: true,
+        status: AudioRouteStatus.success,
+        requestedDevice: requested,
+        actualDevice: actual,
+        message: 'done',
+      );
+
+      final map = result.toMap();
+      expect(map['success'], true);
+      expect(map['status'], 'success');
+      expect(map['message'], 'done');
+
+      final decoded = AudioRouteResult.fromMap(map);
+      expect(decoded.success, true);
+      expect(decoded.status, AudioRouteStatus.success);
+      expect(decoded.requestedDevice, requested);
+      expect(decoded.actualDevice, actual);
+      expect(decoded.message, 'done');
+    });
+
+    test('unknown status falls back using success flag', () {
+      final decoded = AudioRouteResult.fromMap({
+        'success': false,
+        'status': 'unexpected',
+      });
+
+      expect(decoded.status, AudioRouteStatus.error);
+      expect(decoded.success, false);
+    });
+  });
 }

@@ -1,3 +1,8 @@
+## Unreleased
+
+* Adds web call session lifecycle hooks and verified route selection results.
+* Adds explicit route clearing back to the browser default audio output.
+
 ## 1.0.0
 
 * Initial stable release of the Web implementation package.
