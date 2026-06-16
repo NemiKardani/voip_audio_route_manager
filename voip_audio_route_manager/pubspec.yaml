@@ -3,6 +3,7 @@ description: "VoIP Audio Route Manager: A production-ready Flutter package for a
 version: 1.1.0
 homepage: https://github.com/NemiKardani/voip_audio_route_manager
 repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager_platform_interface
+publish_to: none
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
