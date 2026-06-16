@@ -1,6 +1,6 @@
 name: voip_audio_route_manager_platform_interface
 description: "Platform interface for voip_audio_route_manager. Defines the contract and common data models for unified audio output device management in Flutter."
-version: 1.0.0
+version: 1.1.0
 homepage: https://github.com/NemiKardani/voip_audio_route_manager
 repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager/voip_audio_route_manager_platform_interface
 
