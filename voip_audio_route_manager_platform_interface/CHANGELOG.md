@@ -1,7 +1,8 @@
-## Unreleased
+## 1.1.0 - 2026-06-16
 
-* Adds `AudioRouteResult` and `AudioRouteStatus`.
-* Adds call session lifecycle and verified route selection methods to the platform interface.
+### Added
+- `AudioRouteResult` and `AudioRouteStatus` models.
+- Call session lifecycle and verified route selection methods to the platform interface.
 
 ## 1.0.0
 

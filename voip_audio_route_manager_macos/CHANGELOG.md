@@ -1,7 +1,8 @@
-## Unreleased
+## 1.1.0 - 2026-06-16
 
-* Adds verified route selection results for CoreAudio default output changes.
-* Reports route clearing as unsupported because macOS routing is system-default based.
+### Added
+- Verified route selection results for CoreAudio default output changes.
+- Reports route clearing as unsupported because macOS routing is system-default based.
 
 ## 1.0.0
 

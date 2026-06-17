@@ -1,26 +1,19 @@
-## 1.2.0 - 2026-06-17
-
-### Fixed
-- Android: `switchToSpeaker()` silently failing when app launched from terminated state
-  via `flutter_callkit_incoming` (FCM inbound call scenario)
-- Android 12+ (API 31+): Replaced deprecated `setSpeakerphoneOn()` with
-  `AudioManager.setCommunicationDevice()` for reliable speaker routing
-- Android: `AudioManager` now set to `MODE_IN_COMMUNICATION` before every route change
-- Android: `AudioFocusRequest` properly requested with `USAGE_VOICE_COMMUNICATION`
-- Both platforms: Added `AudioDeviceCallback` (Android) / `AVAudioSession` notification (iOS)
-  so `onRouteChanged` stream reflects the real OS-level route, not the intended one
+## 1.1.0 - 2026-06-17
 
 ### Added
-- `getAvailableRoutes()` — query currently available audio output devices before switching
-- `onRouteChanged` stream — reactive stream for OS-level audio route changes
-- `clearAudioRoute()` — properly tears down audio session when call ends
-- `AudioRoute` model with `AudioRouteType` enum for type-safe route handling
+- VoIP call session lifecycle APIs: `startCallSession()` and `endCallSession()`.
+- Verified route selection APIs returning `AudioRouteResult`.
+- `clearAudioRoute()` to release explicit route requests and properly tear down audio sessions when calls end.
+- `getAvailableRoutes()` — query currently available audio output devices before switching.
+- `onRouteChanged` stream — reactive stream for OS-level audio route changes.
+- `AudioRoute` model with `AudioRouteType` enum for type-safe route handling.
 
-## Unreleased
-
-* Adds VoIP call session lifecycle APIs: `startCallSession()` and `endCallSession()`.
-* Adds verified route selection APIs returning `AudioRouteResult`.
-* Adds `clearAudioRoute()` to release explicit route requests where supported.
+### Fixed
+- Android: `switchToSpeaker()` silently failing when app launched from terminated state via `flutter_callkit_incoming` (FCM inbound call scenario).
+- Android 12+ (API 31+): Replaced deprecated `setSpeakerphoneOn()` with `AudioManager.setCommunicationDevice()` for reliable speaker routing.
+- Android: `AudioManager` now set to `MODE_IN_COMMUNICATION` before every route change.
+- Android: `AudioFocusRequest` properly requested with `USAGE_VOICE_COMMUNICATION`.
+- Both platforms: Added `AudioDeviceCallback` (Android) / `AVAudioSession` notification (iOS) so `onRouteChanged` stream reflects the real OS-level route, not the intended one.
 
 ## 1.0.0
 

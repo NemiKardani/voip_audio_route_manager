@@ -1,7 +1,8 @@
-## Unreleased
+## 1.1.0 - 2026-06-16
 
-* Adds web call session lifecycle hooks and verified route selection results.
-* Adds explicit route clearing back to the browser default audio output.
+### Added
+- Web call session lifecycle hooks and verified route selection results.
+- Explicit route clearing back to the browser default audio output.
 
 ## 1.0.0
 

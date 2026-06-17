@@ -1,21 +1,56 @@
 releases:
   - package_name: voip_audio_route_manager
     version: 1.1.0
-    commit_id: "7b77450"
+    commit_id: "b192885"
     changes:
       - "Adds VoIP call session lifecycle APIs: startCallSession() and endCallSession()."
       - "Adds selectAudioRoute, selectAudioRouteType, selectAudioRouteByName, and clearAudioRoute."
       - "Updates the example application with clean controls and developer explanations."
+      - "Fixes Android switchToSpeaker() silently failing when app launched from terminated state via flutter_callkit_incoming (FCM inbound call scenario)."
+      - "Fixes Android 12+ (API 31+): Replaced deprecated setSpeakerphoneOn() with AudioManager.setCommunicationDevice() for reliable speaker routing."
+      - "Fixes Android: AudioManager now set to MODE_IN_COMMUNICATION before every route change."
+      - "Fixes Android: AudioFocusRequest properly requested with USAGE_VOICE_COMMUNICATION."
+      - "Fixes Android/iOS: Added AudioDeviceCallback (Android) / AVAudioSession notification (iOS) so onRouteChanged stream reflects the real OS-level route."
+      - "Adds getAvailableRoutes() to query currently available audio output devices before switching."
+      - "Adds onRouteChanged stream - reactive stream for OS-level audio route changes."
+      - "Adds clearAudioRoute() to properly tear down audio session when call ends."
+      - "Adds AudioRoute model with AudioRouteType enum for type-safe route handling."
 
   - package_name: voip_audio_route_manager_platform_interface
     version: 1.1.0
     commit_id: "7b77450"
     changes:
       - "Adds startCallSession, endCallSession, selectAudioRoute, and clearAudioRoute to interface."
+      - "Adds AudioRouteResult and AudioRouteStatus."
 
   - package_name: voip_audio_route_manager_android
     version: 1.1.0
+    commit_id: "b192885"
+    changes:
+      - "Implements VoIP call session starting and ending on Android with voice communication mode and audio focus."
+      - "Implements AudioRouteResult and explicit route clearing via clearCommunicationDevice() on Android 12+."
+      - "Implements AudioDeviceCallback listener to stream real OS-level route changes to the platform channel."
+      - "Fixes: Replaced deprecated setSpeakerphoneOn() with AudioManager.setCommunicationDevice() on Android 12+ (API 31+)."
+      - "Fixes: switchToSpeaker() silently failing when app is launched from terminated state."
+
+  - package_name: voip_audio_route_manager_ios
+    version: 1.1.0
+    commit_id: "b192885"
+    changes:
+      - "Implements VoIP call session starting and ending on iOS with AVAudioSession activation/deactivation."
+      - "Implements preferred input/output overrides and verified route selection results."
+      - "Implements AVAudioSession.routeChangeNotification listener to stream real OS-level route changes to the platform channel."
+
+  - package_name: voip_audio_route_manager_macos
+    version: 1.1.0
     commit_id: "7b77450"
     changes:
-      - "Implements VoIP call session starting and ending on Android."
-      - "Implements AudioRouteResult on Android."
+      - "Adds verified route selection results for CoreAudio default output changes."
+      - "Reports route clearing as unsupported because macOS routing is system-default based."
+
+  - package_name: voip_audio_route_manager_web
+    version: 1.1.0
+    commit_id: "7b77450"
+    changes:
+      - "Adds web call session lifecycle hooks and verified route selection results."
+      - "Adds explicit route clearing back to the browser default audio output."

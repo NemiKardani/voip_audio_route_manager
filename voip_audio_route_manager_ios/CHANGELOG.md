@@ -1,7 +1,9 @@
-## Unreleased
+## 1.1.0 - 2026-06-17
 
-* Adds native call session lifecycle handling for AVAudioSession activation/deactivation.
-* Adds verified route selection results and explicit route clearing for preferred input/output overrides.
+### Added
+- Native call session lifecycle handling for `AVAudioSession` activation/deactivation.
+- Verified route selection results and explicit route clearing for preferred input/output overrides.
+- Listen to `AVAudioSession.routeChangeNotification` and stream real OS-level route changes to the platform channel.
 
 ## 1.0.0
 

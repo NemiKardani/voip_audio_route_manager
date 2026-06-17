@@ -1,6 +1,6 @@
 name: voip_audio_route_manager_macos
 description: "macOS implementation of voip_audio_route_manager. Manages audio output routing and device discovery on macOS systems using native audio frameworks."
-version: 1.0.0
+version: 1.1.0
 homepage: https://github.com/NemiKardani/voip_audio_route_manager
 repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager_macos
 
