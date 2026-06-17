@@ -84,7 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _manager.onRouteChanged.listen((route) {
           setState(() {
             _currentRoute = _devices.firstWhere(
-              (d) => d.type.name == route || d.id == route || d.name.toLowerCase().contains(route.toLowerCase()),
+              (d) =>
+                  d.type.name == route ||
+                  d.id == route ||
+                  d.name.toLowerCase().contains(route.toLowerCase()),
               orElse: () => AudioOutputDevice(
                 id: route,
                 name: route.toUpperCase(),
