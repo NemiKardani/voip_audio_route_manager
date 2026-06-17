@@ -1,0 +1,140 @@
+name: Publish to Pub.dev
+
+on:
+  push:
+    tags:
+      - 'voip_audio_route_manager*-v*'
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'Package to publish'
+        required: true
+        type: choice
+        options:
+          - 'voip_audio_route_manager'
+          - 'voip_audio_route_manager_android'
+          - 'voip_audio_route_manager_ios'
+          - 'voip_audio_route_manager_macos'
+          - 'voip_audio_route_manager_web'
+          - 'voip_audio_route_manager_platform_interface'
+      version_name:
+        description: 'Version name (e.g. 1.1.0)'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  dry-run:
+    name: Dry-Run Verification
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.determine-target.outputs.package }}
+      version: ${{ steps.determine-target.outputs.version }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Determine Target Package and Version
+        id: determine-target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PACKAGE="${{ github.event.inputs.package_name }}"
+            VERSION="${{ github.event.inputs.version_name }}"
+          else
+            TAG_NAME="${{ github.ref_name }}"
+            if [[ "$TAG_NAME" =~ ^(voip_audio_route_manager[a-zA-Z_]*)-v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+              PACKAGE="${BASH_REMATCH[1]}"
+              VERSION="${BASH_REMATCH[2]}"
+            else
+              echo "Error: Tag name '$TAG_NAME' does not match expected format <package_name>-v<version>"
+              exit 1
+            fi
+          fi
+          
+          if [ ! -d "$PACKAGE" ]; then
+            echo "Error: Package directory '$PACKAGE' does not exist."
+            exit 1
+          fi
+          
+          echo "Target package: $PACKAGE"
+          echo "Target version: $VERSION"
+          echo "package=$PACKAGE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Validate version in pubspec.yaml
+        run: |
+          PACKAGE="${{ steps.determine-target.outputs.package }}"
+          VERSION="${{ steps.determine-target.outputs.version }}"
+          PUBSPEC_VERSION=$(python3 -c "
+          version = None
+          with open('$PACKAGE/pubspec.yaml') as f:
+              for line in f:
+                  if line.strip().startswith('version:'):
+                      version = line.split(':', 1)[1].strip()
+                      break
+          if version is None:
+              raise ValueError('Could not find version in pubspec.yaml')
+          print(version)
+          ")
+          
+          if [ "$PUBSPEC_VERSION" != "$VERSION" ]; then
+            echo "Error: Version in pubspec.yaml ($PUBSPEC_VERSION) does not match tag version ($VERSION)"
+            exit 1
+          fi
+          echo "Success: pubspec.yaml version matches ($PUBSPEC_VERSION)"
+
+      - name: Validate CHANGELOG.md contains version
+        run: |
+          PACKAGE="${{ steps.determine-target.outputs.package }}"
+          VERSION="${{ steps.determine-target.outputs.version }}"
+          if ! grep -q "$VERSION" "$PACKAGE/CHANGELOG.md"; then
+            echo "Error: Version $VERSION is not documented in $PACKAGE/CHANGELOG.md"
+            exit 1
+          fi
+          echo "Success: CHANGELOG.md documents version $VERSION"
+
+      - name: Dry-Run Publication
+        working-directory: ${{ steps.determine-target.outputs.package }}
+        run: |
+          flutter pub get
+          flutter pub publish --dry-run
+
+  verify-and-publish:
+    name: Verify & Publish
+    needs: dry-run
+    runs-on: ubuntu-latest
+    # Requires manual verification from environment reviewers before starting
+    environment: pub.dev-publishing
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Publish Package to Pub.dev (OIDC)
+        working-directory: ${{ needs.dry-run.outputs.package }}
+        run: |
+          flutter pub get
+          flutter pub publish --force

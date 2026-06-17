@@ -37,6 +37,13 @@ public class FlutterVoipAudioRouteManagerAndroidPlugin: FlutterPlugin, MethodCal
   private var focusRequest: AudioFocusRequest? = null
   private var preferredDeviceType: String? = null
 
+  private data class RouteAttempt(
+    val success: Boolean,
+    val status: String,
+    val message: String? = null,
+    val errorCode: String? = null
+  )
+
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     context = flutterPluginBinding.applicationContext
     audioManager = context?.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -65,6 +72,16 @@ public class FlutterVoipAudioRouteManagerAndroidPlugin: FlutterPlugin, MethodCal
       "currentAudioRoute" -> {
         result.success(getCurrentAudioRoute(am))
       }
+      "startCallSession" -> {
+        am.mode = AudioManager.MODE_IN_COMMUNICATION
+        requestAudioFocus()
+        notifyDevicesChanged()
+        result.success(null)
+      }
+      "endCallSession" -> {
+        endCallSession(am)
+        result.success(null)
+      }
       "setAudioRoute" -> {
         val deviceId = call.argument<String>("id")
         if (deviceId != null) {
@@ -88,6 +105,71 @@ public class FlutterVoipAudioRouteManagerAndroidPlugin: FlutterPlugin, MethodCal
         } else {
           result.error("INVALID_ARGUMENTS", "Device name is required", null)
         }
+      }
+      "selectAudioRoute" -> {
+        val deviceId = call.argument<String>("id")
+        if (deviceId != null) {
+          selectAudioRouteById(am, deviceId, result)
+        } else {
+          result.success(routeResult(false, "notFound", null, getCurrentAudioRoute(am), "Device ID is required", "INVALID_ARGUMENTS"))
+        }
+      }
+      "selectAudioRouteType" -> {
+        val type = call.argument<String>("type")
+        if (type != null) {
+          selectAudioRouteByType(am, type, result)
+        } else {
+          result.success(routeResult(false, "notFound", null, getCurrentAudioRoute(am), "Device type is required", "INVALID_ARGUMENTS"))
+        }
+      }
+      "selectAudioRouteByName" -> {
+        val name = call.argument<String>("name")
+        if (name != null) {
+          selectAudioRouteByName(am, name, result)
+        } else {
+          result.success(routeResult(false, "notFound", null, getCurrentAudioRoute(am), "Device name is required", "INVALID_ARGUMENTS"))
+        }
+      }
+      "clearAudioRoute" -> {
+        clearAudioRoute(am)
+        result.success(null)
+      }
+      "switchToSpeaker" -> {
+        result.success(routeToSpeaker(am))
+      }
+      "switchToEarpiece" -> {
+        result.success(routeToEarpiece(am))
+      }
+      "getAvailableRoutes" -> {
+        val routes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          am.availableCommunicationDevices.map { device ->
+            mapOf(
+              "type" to when (device.type) {
+                AudioDeviceInfo.TYPE_BUILTIN_SPEAKER  -> "speaker"
+                AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "earpiece"
+                AudioDeviceInfo.TYPE_BLUETOOTH_SCO    -> "bluetooth"
+                AudioDeviceInfo.TYPE_BLE_HEADSET      -> "bluetooth"
+                AudioDeviceInfo.TYPE_WIRED_HEADSET    -> "wired_headset"
+                AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired_headset"
+                else -> "unknown"
+              },
+              "id"   to device.id,
+              "name" to (device.productName?.toString() ?: "Unknown")
+            )
+          }
+        } else {
+          listOf(
+            mapOf("type" to "speaker", "id" to 1, "name" to "Built-in Speaker"),
+            mapOf("type" to "earpiece", "id" to 2, "name" to "Built-in Earpiece")
+          )
+        }
+        result.success(routes)
+      }
+      "getCurrentRoute" -> {
+        val current = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          am.communicationDevice?.type
+        } else null
+        result.success(current?.toString())
       }
       else -> {
         result.notImplemented()
@@ -197,17 +279,36 @@ public class FlutterVoipAudioRouteManagerAndroidPlugin: FlutterPlugin, MethodCal
   }
 
   private fun notifyDevicesChanged() {
+    val am = audioManager ?: return
+    val current = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      when (am.communicationDevice?.type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "speaker"
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "earpiece"
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_BLE_HEADSET -> "bluetooth"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired_headset"
+        null -> "none"
+        else -> "unknown"
+      }
+    } else {
+      @Suppress("DEPRECATION")
+      if (am.isSpeakerphoneOn) "speaker" else "earpiece"
+    }
+
     handler.post {
-      val sink = eventSink ?: return@post
-      val am = audioManager ?: return@post
+      methodChannel.invokeMethod("onAudioRouteChanged", mapOf("route" to current))
       
+      val sink = eventSink ?: return@post
       val devices = getAvailableDevices(am)
       sink.success(mapOf("event" to "devices_changed", "devices" to devices))
       
       val route = getCurrentAudioRoute(am)
-      if (route != null) {
-        sink.success(mapOf("event" to "route_changed", "device" to route))
-      }
+      sink.success(mapOf(
+        "event" to "route_changed",
+        "route" to current,
+        "device" to (route ?: mapOf("id" to current, "name" to current, "type" to current, "isSelected" to true))
+      ))
     }
   }
 
@@ -364,10 +465,19 @@ public class FlutterVoipAudioRouteManagerAndroidPlugin: FlutterPlugin, MethodCal
   }
 
   private fun setAudioRouteById(am: AudioManager, id: String, result: Result) {
+    val attempt = applyAudioRouteById(am, id)
+    if (attempt.success) {
+      result.success(null)
+    } else {
+      result.error(attempt.errorCode ?: "ROUTING_FAILED", attempt.message ?: "Failed to switch audio route", null)
+    }
+  }
+
+  private fun applyAudioRouteById(am: AudioManager, id: String): RouteAttempt {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       val infoList = am.availableCommunicationDevices
       val targetId = id.toIntOrNull()
-      
+
       var targetDevice = infoList.firstOrNull { it.id == targetId }
       if (targetDevice == null && targetId != null) {
         // If ID match fails, try matching by TYPE (e.g. if A2DP ID was passed but SCO ID is in availableCommunicationDevices)
@@ -378,43 +488,44 @@ public class FlutterVoipAudioRouteManagerAndroidPlugin: FlutterPlugin, MethodCal
           targetDevice = infoList.firstOrNull { mapDeviceType(it.type) == selectedType }
         }
       }
-      
+
       if (targetDevice != null) {
         am.mode = AudioManager.MODE_IN_COMMUNICATION
         val success = am.setCommunicationDevice(targetDevice)
         if (success) {
           preferredDeviceType = mapDeviceType(targetDevice.type)
           log("Successfully set communication device to: ${targetDevice.productName}, preferredDeviceType set to: $preferredDeviceType")
-          result.success(null)
           notifyDevicesChanged()
+          return RouteAttempt(true, "success", "Audio route changed successfully.")
         } else {
-          result.error("ROUTING_REJECTED", "Android rejected communication routing request", null)
+          return RouteAttempt(false, "rejected", "Android rejected communication routing request", "ROUTING_REJECTED")
         }
       } else {
         // ID could be speaker/receiver if legacy fallback maps it
-        fallbackRouting(am, id, result)
+        return fallbackRouting(am, id)
       }
     } else {
-      fallbackRouting(am, id, result)
+      return fallbackRouting(am, id)
     }
   }
 
-  private fun fallbackRouting(am: AudioManager, deviceTypeOrId: String, result: Result) {
+  private fun fallbackRouting(am: AudioManager, deviceTypeOrId: String): RouteAttempt {
     am.mode = AudioManager.MODE_IN_COMMUNICATION
     try {
-      if (deviceTypeOrId.contains("speaker")) {
+      val normalized = deviceTypeOrId.lowercase()
+      if (normalized.contains("speaker")) {
         am.isSpeakerphoneOn = true
         am.stopBluetoothSco()
         am.isBluetoothScoOn = false
         preferredDeviceType = "speaker"
         log("Fallback: speakerphone enabled. preferredDeviceType set to: speaker")
-      } else if (deviceTypeOrId.contains("receiver") || deviceTypeOrId.contains("earpiece")) {
+      } else if (normalized.contains("receiver") || normalized.contains("earpiece")) {
         am.isSpeakerphoneOn = false
         am.stopBluetoothSco()
         am.isBluetoothScoOn = false
         preferredDeviceType = "receiver"
         log("Fallback: receiver enabled. preferredDeviceType set to: receiver")
-      } else if (deviceTypeOrId.contains("bluetooth")) {
+      } else if (normalized.contains("bluetooth") || normalized.contains("airpods")) {
         am.isSpeakerphoneOn = false
         am.startBluetoothSco()
         am.isBluetoothScoOn = true
@@ -427,51 +538,225 @@ public class FlutterVoipAudioRouteManagerAndroidPlugin: FlutterPlugin, MethodCal
         preferredDeviceType = null
         log("Fallback: default route. preferredDeviceType cleared.")
       }
-      result.success(null)
       notifyDevicesChanged()
+      return RouteAttempt(true, "success", "Legacy audio route change requested.")
     } catch (e: Exception) {
-      result.error("FALLBACK_ROUTE_ERROR", "Failed legacy audio route change: ${e.message}", null)
+      return RouteAttempt(false, "error", "Failed legacy audio route change: ${e.message}", "FALLBACK_ROUTE_ERROR")
     }
   }
 
   private fun setRouteByType(am: AudioManager, type: String, result: Result) {
+    val attempt = applyRouteByType(am, type)
+    if (attempt.success) {
+      result.success(null)
+    } else {
+      result.error(attempt.errorCode ?: "ROUTING_FAILED", attempt.message ?: "Failed to switch audio route", null)
+    }
+  }
+
+  private fun applyRouteByType(am: AudioManager, type: String): RouteAttempt {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       val infoList = am.availableCommunicationDevices
       val targetDevice = infoList.firstOrNull { mapDeviceType(it.type) == type }
-      
+
       if (targetDevice != null) {
         am.mode = AudioManager.MODE_IN_COMMUNICATION
         val success = am.setCommunicationDevice(targetDevice)
         if (success) {
           preferredDeviceType = type
           log("Successfully set communication device by type $type, preferredDeviceType set to: $preferredDeviceType")
-          result.success(null)
           notifyDevicesChanged()
-          return
+          return RouteAttempt(true, "success", "Audio route changed successfully.")
         }
+        return RouteAttempt(false, "rejected", "Android rejected communication routing request", "ROUTING_REJECTED")
       }
     }
-    fallbackRouting(am, type, result)
+    return fallbackRouting(am, type)
   }
 
   private fun setRouteByName(am: AudioManager, name: String, result: Result) {
+    val attempt = applyRouteByName(am, name)
+    if (attempt.success) {
+      result.success(null)
+    } else {
+      result.error(attempt.errorCode ?: "ROUTING_FAILED", attempt.message ?: "Failed to switch audio route", null)
+    }
+  }
+
+  private fun applyRouteByName(am: AudioManager, name: String): RouteAttempt {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       val infoList = am.availableCommunicationDevices
       val targetDevice = infoList.firstOrNull { it.productName.toString().contains(name, ignoreCase = true) }
-      
+
       if (targetDevice != null) {
         am.mode = AudioManager.MODE_IN_COMMUNICATION
         val success = am.setCommunicationDevice(targetDevice)
         if (success) {
           preferredDeviceType = mapDeviceType(targetDevice.type)
           log("Successfully set communication device by name $name, preferredDeviceType set to: $preferredDeviceType")
-          result.success(null)
           notifyDevicesChanged()
-          return
+          return RouteAttempt(true, "success", "Audio route changed successfully.")
         }
+        return RouteAttempt(false, "rejected", "Android rejected communication routing request", "ROUTING_REJECTED")
       }
     }
-    fallbackRouting(am, name, result)
+    return fallbackRouting(am, name)
+  }
+
+  private fun selectAudioRouteById(am: AudioManager, id: String, result: Result) {
+    val requested = getAvailableDevices(am).firstOrNull { it["id"] == id }
+    if (requested == null) {
+      result.success(routeResult(false, "notFound", null, getCurrentAudioRoute(am), "No audio output device matched the requested ID.", null))
+      return
+    }
+
+    val attempt = applyAudioRouteById(am, id)
+    result.success(routeResult(attempt.success, attempt.status, requested, getCurrentAudioRoute(am), attempt.message, attempt.errorCode))
+  }
+
+  private fun selectAudioRouteByType(am: AudioManager, type: String, result: Result) {
+    val requested = getAvailableDevices(am).firstOrNull { it["type"] == type }
+    if (requested == null) {
+      result.success(routeResult(false, "notFound", null, getCurrentAudioRoute(am), "No audio output device matched type $type.", null))
+      return
+    }
+
+    val attempt = applyRouteByType(am, type)
+    result.success(routeResult(attempt.success, attempt.status, requested, getCurrentAudioRoute(am), attempt.message, attempt.errorCode))
+  }
+
+  private fun selectAudioRouteByName(am: AudioManager, name: String, result: Result) {
+    val requested = getAvailableDevices(am).firstOrNull {
+      (it["name"] as? String)?.contains(name, ignoreCase = true) == true
+    }
+    if (requested == null) {
+      result.success(routeResult(false, "notFound", null, getCurrentAudioRoute(am), "No audio output device matched name $name.", null))
+      return
+    }
+
+    val attempt = applyRouteByName(am, name)
+    result.success(routeResult(attempt.success, attempt.status, requested, getCurrentAudioRoute(am), attempt.message, attempt.errorCode))
+  }
+
+  private fun ensureCommunicationMode(am: AudioManager) {
+    am.mode = AudioManager.MODE_IN_COMMUNICATION
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      if (focusRequest == null) {
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+          .setAudioAttributes(
+            AudioAttributes.Builder()
+              .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+              .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+              .build()
+          )
+          .setAcceptsDelayedFocusGain(false)
+          .build()
+        focusRequest = request
+      }
+      focusRequest?.let { am.requestAudioFocus(it) }
+    } else {
+      @Suppress("DEPRECATION")
+      am.requestAudioFocus(null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+    }
+  }
+
+  private fun routeToSpeaker(am: AudioManager): Boolean {
+    ensureCommunicationMode(am)
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      val speaker = am.availableCommunicationDevices
+        .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+      if (speaker != null) {
+        val success = am.setCommunicationDevice(speaker)
+        if (success) {
+          preferredDeviceType = "speaker"
+          notifyDevicesChanged()
+        }
+        success
+      } else {
+        false
+      }
+    } else {
+      @Suppress("DEPRECATION")
+      am.isSpeakerphoneOn = true
+      @Suppress("DEPRECATION")
+      am.isBluetoothScoOn = false
+      am.stopBluetoothSco()
+      preferredDeviceType = "speaker"
+      notifyDevicesChanged()
+      true
+    }
+  }
+
+  private fun routeToEarpiece(am: AudioManager): Boolean {
+    ensureCommunicationMode(am)
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      val earpiece = am.availableCommunicationDevices
+        .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
+      if (earpiece != null) {
+        val success = am.setCommunicationDevice(earpiece)
+        if (success) {
+          preferredDeviceType = "receiver"
+          notifyDevicesChanged()
+        }
+        success
+      } else {
+        val success = am.clearCommunicationDevice()
+        preferredDeviceType = "receiver"
+        notifyDevicesChanged()
+        true
+      }
+    } else {
+      @Suppress("DEPRECATION")
+      am.isSpeakerphoneOn = false
+      @Suppress("DEPRECATION")
+      am.isBluetoothScoOn = false
+      am.stopBluetoothSco()
+      preferredDeviceType = "receiver"
+      notifyDevicesChanged()
+      true
+    }
+  }
+
+  private fun clearAudioRoute(am: AudioManager) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      am.clearCommunicationDevice()
+    } else {
+      @Suppress("DEPRECATION")
+      am.isSpeakerphoneOn = false
+      @Suppress("DEPRECATION")
+      am.isBluetoothScoOn = false
+      am.stopBluetoothSco()
+    }
+    preferredDeviceType = null
+    am.mode = AudioManager.MODE_NORMAL
+    notifyDevicesChanged()
+  }
+
+  private fun endCallSession(am: AudioManager) {
+    clearAudioRoute(am)
+    abandonAudioFocus()
+    am.mode = AudioManager.MODE_NORMAL
+  }
+
+  private fun routeResult(
+    success: Boolean,
+    status: String,
+    requestedDevice: Map<String, Any>?,
+    actualDevice: Map<String, Any>?,
+    message: String?,
+    errorCode: String?
+  ): Map<String, Any?> {
+    return mapOf(
+      "success" to success,
+      "status" to status,
+      "requestedDevice" to requestedDevice,
+      "actualDevice" to actualDevice,
+      "message" to message,
+      "errorCode" to errorCode
+    )
   }
 
   private fun requestAudioFocus() {

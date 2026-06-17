@@ -1,5 +1,12 @@
 # VoIP Audio Route Manager
 
+[![pub package](https://img.shields.io/pub/v/voip_audio_route_manager.svg?logo=dart&logoColor=white)](https://pub.dev/packages/voip_audio_route_manager)
+[![pub points](https://img.shields.io/pub/points/voip_audio_route_manager.svg)](https://pub.dev/packages/voip_audio_route_manager/score)
+[![Platform](https://img.shields.io/badge/platform-android%20%7C%20ios%20%7C%20macos%20%7C%20web-blue.svg)](https://pub.dev/packages/voip_audio_route_manager)
+[![License: MIT](https://img.shields.io/badge/license-MIT-purple.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/NemiKardani/voip_audio_route_manager/actions/workflows/ci_checks.yml/badge.svg)](https://github.com/NemiKardani/voip_audio_route_manager/actions)
+[![GitHub Stars](https://img.shields.io/github/stars/NemiKardani/voip_audio_route_manager.svg)](https://github.com/NemiKardani/voip_audio_route_manager/stargazers)
+
 A production-ready Flutter package for advanced audio output device management and routing, specifically designed for VoIP communication applications (WebRTC, SIP/VoIP, custom calling engines).
 
 Compatible with **Android**, **iOS**, **macOS**, and **Web**.
@@ -36,7 +43,7 @@ Add this dependency to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  voip_audio_route_manager: ^0.0.1
+  voip_audio_route_manager: ^1.1.0
 ```
 
 ---
@@ -85,6 +92,12 @@ final manager = VoipAudioRouteManager.instance;
 
 // Optional: Enable logs in debug mode
 await manager.initialize(enableLogs: true);
+
+// Activate native VoIP audio mode/focus when a call starts
+await manager.startCallSession();
+
+// Release route/focus requests when the call ends
+await manager.endCallSession();
 ```
 
 ### Fetch Devices & Current Route
@@ -127,6 +140,20 @@ await manager.setAudioRouteType(AudioOutputType.speaker);
 
 // Switch by name (matches substring case-insensitively)
 await manager.setAudioRouteByName("AirPods Pro");
+```
+
+### Verified Route Switching
+```dart
+// Returns requested route, actual route, status, and diagnostics.
+final AudioRouteResult result =
+    await manager.selectAudioRouteType(AudioOutputType.speaker);
+
+if (!result.success) {
+  print("Route failed: ${result.status} ${result.message}");
+}
+
+// Clear explicit routing and return to platform default behavior.
+await manager.clearAudioRoute();
 ```
 
 ---
@@ -205,4 +232,14 @@ class CallStateListener implements SipUaHelperListener {
     );
   }
 }
+
+---
+
+## Contributing & Local Development
+
+We welcome contributions! This project is structured as a **Federated Flutter Plugin** with separate packages for each platform. 
+
+If you want to help improve this package:
+1. Read our **[Contributing Guide](https://github.com/NemiKardani/voip_audio_route_manager/blob/main/doc/CONTRIBUTING.md)** for details on repository scaffolding, setting up FVM, and running tests locally.
+2. Open an issue or submit a Pull Request. Please ensure all sanity checks and tests pass in the CI/CD pipeline before requesting review.
 ```

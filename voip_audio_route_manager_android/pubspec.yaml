@@ -1,8 +1,14 @@
 name: voip_audio_route_manager_android
 description: "Android implementation of voip_audio_route_manager. Manages audio routing using native Android AudioManager and communication device routing APIs."
-version: 1.0.0
+version: 1.1.0
 homepage: https://github.com/NemiKardani/voip_audio_route_manager
-repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager/voip_audio_route_manager_android
+repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager_android
+topics:
+  - voip
+  - audio-routing
+  - webrtc
+  - audio
+  - media
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -11,7 +17,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  voip_audio_route_manager_platform_interface: ^1.0.0
+  voip_audio_route_manager_platform_interface: ^1.1.0
 
 dependency_overrides:
   voip_audio_route_manager_platform_interface:

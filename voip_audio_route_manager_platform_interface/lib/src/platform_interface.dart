@@ -1,5 +1,6 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'audio_device_model.dart';
+import 'audio_route_result.dart';
 import 'method_channel_implementation.dart';
 
 /// The common platform interface contract for the [VoipAudioRouteManager] plugin.
@@ -30,6 +31,19 @@ abstract class VoipAudioRouteManagerPlatform extends PlatformInterface {
     throw UnimplementedError('initialize() has not been implemented.');
   }
 
+  /// Activates platform audio state for an active VoIP call.
+  ///
+  /// Native implementations should request/activate the platform's voice
+  /// communication audio mode here, without selecting a specific output route.
+  Future<void> startCallSession() {
+    return Future.value();
+  }
+
+  /// Ends the active VoIP audio session and releases any route/focus requests.
+  Future<void> endCallSession() {
+    return Future.value();
+  }
+
   /// Returns the list of currently available audio output devices.
   Future<List<AudioOutputDevice>> availableDevices() {
     throw UnimplementedError('availableDevices() has not been implemented.');
@@ -54,6 +68,88 @@ abstract class VoipAudioRouteManagerPlatform extends PlatformInterface {
   Future<void> setAudioRouteByName(String name) {
     throw UnimplementedError('setAudioRouteByName() has not been implemented.');
   }
+
+  /// Sets the active route by ID and returns the requested and actual route.
+  Future<AudioRouteResult> selectAudioRoute(String id) async {
+    final devices = await availableDevices();
+    final requested = devices.cast<AudioOutputDevice?>().firstWhere(
+          (device) => device?.id == id,
+          orElse: () => null,
+        );
+
+    if (requested == null) {
+      return const AudioRouteResult(
+        success: false,
+        status: AudioRouteStatus.notFound,
+        message: 'No audio output device matched the requested ID.',
+      );
+    }
+
+    try {
+      await setAudioRoute(id);
+      final actual = await currentAudioRoute();
+      final matches = actual?.id == id || actual?.type == requested.type;
+      return AudioRouteResult(
+        success: matches,
+        status: matches ? AudioRouteStatus.success : AudioRouteStatus.pending,
+        requestedDevice: requested,
+        actualDevice: actual,
+        message: matches
+            ? 'Audio route changed successfully.'
+            : 'Route request was sent, but the active route does not match yet.',
+      );
+    } catch (error) {
+      return AudioRouteResult(
+        success: false,
+        status: AudioRouteStatus.error,
+        requestedDevice: requested,
+        actualDevice: await currentAudioRoute(),
+        message: error.toString(),
+      );
+    }
+  }
+
+  /// Sets the active route by type and returns the requested and actual route.
+  Future<AudioRouteResult> selectAudioRouteType(String type) async {
+    final devices = await availableDevices();
+    final requested = devices.cast<AudioOutputDevice?>().firstWhere(
+          (device) => device?.type.name == type,
+          orElse: () => null,
+        );
+
+    if (requested == null) {
+      return AudioRouteResult(
+        success: false,
+        status: AudioRouteStatus.notFound,
+        message: 'No audio output device matched type $type.',
+      );
+    }
+
+    return selectAudioRoute(requested.id);
+  }
+
+  /// Sets the active route by matching a device name.
+  Future<AudioRouteResult> selectAudioRouteByName(String name) async {
+    final devices = await availableDevices();
+    final requested = devices.cast<AudioOutputDevice?>().firstWhere(
+          (device) =>
+              device?.name.toLowerCase().contains(name.toLowerCase()) == true,
+          orElse: () => null,
+        );
+
+    if (requested == null) {
+      return AudioRouteResult(
+        success: false,
+        status: AudioRouteStatus.notFound,
+        message: 'No audio output device matched name $name.',
+      );
+    }
+
+    return selectAudioRoute(requested.id);
+  }
+
+  /// Clears a previously requested route and returns to platform default routing.
+  Future<void> clearAudioRoute() async {}
 
   /// Emits updates containing the full list of available devices (including selection status).
   Stream<List<AudioOutputDevice>> get audioDevicesStream {
@@ -99,5 +195,25 @@ abstract class VoipAudioRouteManagerPlatform extends PlatformInterface {
   /// On other platforms, this resolves to null.
   Future<AudioOutputDevice?> selectAudioOutput({String? deviceId}) {
     return Future.value(null);
+  }
+
+  /// Returns the list of currently available audio output routes.
+  Future<List<dynamic>> getAvailableRoutes() {
+    throw UnimplementedError('getAvailableRoutes() has not been implemented.');
+  }
+
+  /// Switches the audio output to speaker.
+  Future<bool> switchToSpeaker() {
+    throw UnimplementedError('switchToSpeaker() has not been implemented.');
+  }
+
+  /// Switches the audio output to earpiece.
+  Future<bool> switchToEarpiece() {
+    throw UnimplementedError('switchToEarpiece() has not been implemented.');
+  }
+
+  /// Stream that emits the current route name whenever it changes.
+  Stream<String> get onRouteChangedStream {
+    throw UnimplementedError('onRouteChangedStream has not been implemented.');
   }
 }

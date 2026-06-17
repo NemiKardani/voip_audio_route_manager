@@ -1,0 +1,115 @@
+name: CI Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  sanity-checks:
+    name: Check ${{ matrix.package-name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package-name: 'voip_audio_route_manager'
+            path: 'voip_audio_route_manager'
+          - package-name: 'voip_audio_route_manager_android'
+            path: 'voip_audio_route_manager_android'
+          - package-name: 'voip_audio_route_manager_ios'
+            path: 'voip_audio_route_manager_ios'
+          - package-name: 'voip_audio_route_manager_macos'
+            path: 'voip_audio_route_manager_macos'
+          - package-name: 'voip_audio_route_manager_platform_interface'
+            path: 'voip_audio_route_manager_platform_interface'
+          - package-name: 'voip_audio_route_manager_web'
+            path: 'voip_audio_route_manager_web'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get dependencies
+        working-directory: ${{ matrix.path }}
+        run: flutter pub get
+
+      - name: Verify Formatting
+        working-directory: ${{ matrix.path }}
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Run Static Analysis
+        working-directory: ${{ matrix.path }}
+        run: flutter analyze
+
+      - name: Run Unit & Widget Tests
+        working-directory: ${{ matrix.path }}
+        run: |
+          if [ -d "test" ]; then
+            flutter test
+          else
+            echo "No test/ directory found. Skipping tests."
+          fi
+
+      - name: Pub.dev Publish Dry-Run
+        working-directory: ${{ matrix.path }}
+        run: flutter pub publish --dry-run
+        continue-on-error: true
+
+  gemini-review:
+    name: Gemini AI Code Review
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Diff
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff origin/main...HEAD > changes.diff
+          else
+            git diff HEAD~1 > changes.diff
+          fi
+        continue-on-error: true
+
+      - name: Run Gemini AI Review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -s changes.diff ] && [ ! -z "$GEMINI_API_KEY" ]; then
+            node scripts/gemini_review.js changes.diff
+          else
+            echo "Skipping review: either diff is empty or GEMINI_API_KEY is not configured."
+            echo "### Gemini Review skipped (no changes or missing API key)" > gemini_review.md
+          fi
+
+      - name: Comment PR with Review
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request'
+        with:
+          header: gemini-code-review
+          path: gemini_review.md
+
+  lint-format-and-test:
+    name: Lint, Format, and Test
+    needs: sanity-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm Sanity Checks Completed
+        run: echo "All parallel package sanity checks passed. Lint, Format, and Test completed!"
