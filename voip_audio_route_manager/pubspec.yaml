@@ -19,11 +19,11 @@ dependencies:
     sdk: flutter
   
   # Using 'any' makes version resolution dynamic and avoids manual bumping when platform packages update.
-  voip_audio_route_manager_platform_interface: any
-  voip_audio_route_manager_android: any
-  voip_audio_route_manager_ios: any
-  voip_audio_route_manager_macos: any
-  voip_audio_route_manager_web: any
+  voip_audio_route_manager_platform_interface: ^1.1.0
+  voip_audio_route_manager_android: ^1.1.0
+  voip_audio_route_manager_ios: ^1.1.0
+  voip_audio_route_manager_macos: ^1.1.0
+  voip_audio_route_manager_web: ^1.1.0
 
 dependency_overrides:
   voip_audio_route_manager_platform_interface:
