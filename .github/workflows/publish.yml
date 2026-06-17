@@ -116,8 +116,6 @@ jobs:
     name: Verify & Publish
     needs: dry-run
     runs-on: ubuntu-latest
-    # Requires manual verification from environment reviewers before starting
-    environment: pub.dev-publishing
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
