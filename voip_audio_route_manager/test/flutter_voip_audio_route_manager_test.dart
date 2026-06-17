@@ -108,13 +108,39 @@ class MockVoipAudioRouteManagerPlatform extends VoipAudioRouteManagerPlatform
     );
   }
 
+  bool switchToSpeakerCalled = false;
+  bool switchToEarpieceCalled = false;
+  bool getAvailableRoutesCalled = false;
+
   @override
-  Future<AudioRouteResult> clearAudioRoute() async {
+  Future<void> clearAudioRoute() async {
     clearAudioRouteCalled = true;
-    return const AudioRouteResult(
-      success: true,
-      status: AudioRouteStatus.cleared,
-    );
+  }
+
+  @override
+  Future<List<dynamic>> getAvailableRoutes() async {
+    getAvailableRoutesCalled = true;
+    return [
+      {'type': 'speaker', 'id': 1, 'name': 'Speaker'},
+      {'type': 'earpiece', 'id': 2, 'name': 'Earpiece'},
+    ];
+  }
+
+  @override
+  Future<bool> switchToSpeaker() async {
+    switchToSpeakerCalled = true;
+    return true;
+  }
+
+  @override
+  Future<bool> switchToEarpiece() async {
+    switchToEarpieceCalled = true;
+    return true;
+  }
+
+  @override
+  Stream<String> get onRouteChangedStream {
+    return Stream.value('speaker');
   }
 }
 
@@ -217,11 +243,38 @@ void main() {
       expect(mockPlatform.selectRouteNameCalled, 'AirPods');
     });
 
-    test('clearAudioRoute delegates correctly', () async {
+    test('clearAudioRoute delegates correctly and does not throw', () async {
       final manager = VoipAudioRouteManager.instance;
-      final result = await manager.clearAudioRoute();
+      await expectLater(manager.clearAudioRoute(), completes);
       expect(mockPlatform.clearAudioRouteCalled, true);
-      expect(result.status, AudioRouteStatus.cleared);
+    });
+
+    test('switchToSpeaker returns true and calls platform', () async {
+      final manager = VoipAudioRouteManager.instance;
+      final result = await manager.switchToSpeaker();
+      expect(result, true);
+      expect(mockPlatform.switchToSpeakerCalled, true);
+    });
+
+    test('switchToEarpiece returns true and calls platform', () async {
+      final manager = VoipAudioRouteManager.instance;
+      final result = await manager.switchToEarpiece();
+      expect(result, true);
+      expect(mockPlatform.switchToEarpieceCalled, true);
+    });
+
+    test('getAvailableRoutes returns non-empty list', () async {
+      final manager = VoipAudioRouteManager.instance;
+      final routes = await manager.getAvailableRoutes();
+      expect(routes.isNotEmpty, true);
+      expect(routes.first.type, AudioRouteType.speaker);
+      expect(mockPlatform.getAvailableRoutesCalled, true);
+    });
+
+    test('onRouteChanged stream emits speaker', () async {
+      final manager = VoipAudioRouteManager.instance;
+      final route = await manager.onRouteChanged.first;
+      expect(route, 'speaker');
     });
   });
 }

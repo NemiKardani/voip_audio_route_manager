@@ -83,9 +83,20 @@ class _HomeScreenState extends State<HomeScreen> {
         // Emitted when the active audio output route changes (e.g. bluetooth connected/selected).
         _manager.onRouteChanged.listen((route) {
           setState(() {
-            _currentRoute = route;
+            _currentRoute = _devices.firstWhere(
+              (d) => d.type.name == route || d.id == route || d.name.toLowerCase().contains(route.toLowerCase()),
+              orElse: () => AudioOutputDevice(
+                id: route,
+                name: route.toUpperCase(),
+                type: AudioOutputType.values.firstWhere(
+                  (t) => t.name == route,
+                  orElse: () => AudioOutputType.unknown,
+                ),
+                isSelected: true,
+              ),
+            );
           });
-          _addLog('Route Changed Stream: ${route.name} [${route.type.name}]');
+          _addLog('Route Changed Stream: $route');
         }),
         // Emitted when a physical device connects.
         _manager.onDeviceConnected.listen((device) {
@@ -199,8 +210,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _clearExplicitRoute() async {
     try {
       _addLog('Clearing explicit audio route override...');
-      final result = await _manager.clearAudioRoute();
-      _processRouteResult(result);
+      await _manager.clearAudioRoute();
+      _addLog('Explicit audio route override cleared.');
+      _refreshRoute();
     } catch (e) {
       _addLog('Error clearing audio route: $e');
     }

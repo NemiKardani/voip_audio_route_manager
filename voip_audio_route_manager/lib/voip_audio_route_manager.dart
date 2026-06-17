@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:voip_audio_route_manager_platform_interface/voip_audio_route_manager_platform_interface.dart';
 import 'src/logger.dart';
+import 'src/audio_route.dart';
 
 export 'package:voip_audio_route_manager_platform_interface/voip_audio_route_manager_platform_interface.dart'
     show AudioOutputDevice, AudioOutputType, AudioRouteResult, AudioRouteStatus;
+export 'src/audio_route.dart';
 
 /// Advanced audio output routing manager for VoIP applications.
 class VoipAudioRouteManager {
@@ -117,12 +119,10 @@ class VoipAudioRouteManager {
   }
 
   /// Clears any explicit route request and returns to platform default routing.
-  Future<AudioRouteResult> clearAudioRoute() async {
+  Future<void> clearAudioRoute() async {
     VoipAudioLogger.log('Clearing requested audio route...');
-    final result =
-        await VoipAudioRouteManagerPlatform.instance.clearAudioRoute();
-    VoipAudioLogger.log('Clear audio route result: $result');
-    return result;
+    await VoipAudioRouteManagerPlatform.instance.clearAudioRoute();
+    VoipAudioLogger.log('Clear audio route completed.');
   }
 
   /// Emits updates containing the full list of available devices (including selection status).
@@ -168,19 +168,42 @@ class VoipAudioRouteManager {
     });
   }
 
-  /// Stream of the newly selected active audio output route.
-  Stream<AudioOutputDevice> get onRouteChanged {
-    return VoipAudioRouteManagerPlatform.instance.onRouteChanged.map((device) {
-      if (device.type == AudioOutputType.speaker) {
-        VoipAudioLogger.log('Speaker Enabled');
-      } else if (device.type == AudioOutputType.receiver) {
-        VoipAudioLogger.log('Receiver Enabled');
-      } else {
-        VoipAudioLogger.log(
-            'Route Changed: ${device.name} (${device.type.name})');
-      }
-      return device;
+  /// Stream that emits the current route whenever it changes at the OS level.
+  /// Use this instead of assuming your switchTo* call succeeded immediately.
+  Stream<String> get onRouteChanged {
+    return VoipAudioRouteManagerPlatform.instance.onRouteChangedStream
+        .map((route) {
+      VoipAudioLogger.log('Audio Route Changed: $route');
+      return route;
     });
+  }
+
+  /// Returns the list of currently available audio output routes.
+  /// Always call this BEFORE switching routes, especially on cold launch.
+  Future<List<AudioRoute>> getAvailableRoutes() async {
+    final List<dynamic> raw =
+        await VoipAudioRouteManagerPlatform.instance.getAvailableRoutes();
+    return raw
+        .map((e) => AudioRoute.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  /// Switches to speaker. Returns true if the OS confirmed the change.
+  Future<bool> switchToSpeaker() async {
+    VoipAudioLogger.log('Switching to speaker...');
+    final result =
+        await VoipAudioRouteManagerPlatform.instance.switchToSpeaker();
+    VoipAudioLogger.log('Switch to speaker result: $result');
+    return result;
+  }
+
+  /// Switches to earpiece. Returns true if the OS confirmed the change.
+  Future<bool> switchToEarpiece() async {
+    VoipAudioLogger.log('Switching to earpiece...');
+    final result =
+        await VoipAudioRouteManagerPlatform.instance.switchToEarpiece();
+    VoipAudioLogger.log('Switch to earpiece result: $result');
+    return result;
   }
 
   /// Stream of audio focus changes (gained or lost).

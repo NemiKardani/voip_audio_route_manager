@@ -97,11 +97,8 @@ class MethodChannelVoipAudioRouteManager extends VoipAudioRouteManagerPlatform {
   }
 
   @override
-  Future<AudioRouteResult> clearAudioRoute() async {
-    final result = await _methodChannel.invokeMethod<Map<dynamic, dynamic>>(
-      'clearAudioRoute',
-    );
-    return AudioRouteResult.fromMap(result ?? const {});
+  Future<void> clearAudioRoute() async {
+    await _methodChannel.invokeMethod<void>('clearAudioRoute');
   }
 
   @override
@@ -144,5 +141,39 @@ class MethodChannelVoipAudioRouteManager extends VoipAudioRouteManagerPlatform {
     return _eventStream
         .where((event) => event['event'] == 'audio_focus_changed')
         .map((event) => event['focused'] as bool? ?? false);
+  }
+
+  @override
+  Future<List<dynamic>> getAvailableRoutes() async {
+    final List<dynamic>? raw =
+        await _methodChannel.invokeMethod<List<dynamic>>('getAvailableRoutes');
+    return raw ?? [];
+  }
+
+  @override
+  Future<bool> switchToSpeaker() async {
+    return await _methodChannel.invokeMethod<bool>('switchToSpeaker') ?? false;
+  }
+
+  @override
+  Future<bool> switchToEarpiece() async {
+    return await _methodChannel.invokeMethod<bool>('switchToEarpiece') ?? false;
+  }
+
+  @override
+  Stream<String> get onRouteChangedStream {
+    return _eventStream
+        .where((event) =>
+            event.containsKey('route') || event['event'] == 'route_changed')
+        .map((event) {
+      if (event.containsKey('route')) {
+        return event['route'] as String? ?? 'unknown';
+      }
+      final device = event['device'];
+      if (device is Map) {
+        return device['type'] as String? ?? 'unknown';
+      }
+      return 'unknown';
+    });
   }
 }

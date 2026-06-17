@@ -4,6 +4,7 @@ import AVFoundation
 
 public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?
+  private var channel: FlutterMethodChannel?
   private var enableLogs: Bool = false
   private var isListening = false
   private var preferredDeviceId: String?
@@ -21,6 +22,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     let eventChannel = FlutterEventChannel(name: "voip_audio_route_manager/events", binaryMessenger: registrar.messenger())
     
     let instance = FlutterVoipAudioRouteManagerIosPlugin()
+    instance.channel = channel
     registrar.addMethodCallDelegate(instance, channel: channel)
     eventChannel.setStreamHandler(instance)
   }
@@ -90,8 +92,14 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
         result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(session: session), message: "Name required", errorCode: "INVALID_ARGUMENTS"))
       }
     case "clearAudioRoute":
-      let attempt = clearAudioRoute(session: session)
-      result(routeResult(success: attempt.success, status: attempt.status, requestedDevice: nil, actualDevice: getCurrentAudioRoute(session: session), message: attempt.message, errorCode: attempt.errorCode))
+      clearAudioRoute(session: session)
+      result(nil)
+    case "switchToSpeaker":
+      result(routeToSpeaker())
+    case "switchToEarpiece":
+      result(routeToEarpiece())
+    case "getAvailableRoutes":
+      result(getAvailableRoutesList(session: session))
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -133,15 +141,39 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
 
   @objc private func handleRouteChange(notification: Notification) {
     log("Audio route changed notification received.")
-    guard isListening, let sink = eventSink else { return }
-    
     let session = AVAudioSession.sharedInstance()
+    
+    let currentOutput = session.currentRoute.outputs.first
+    let routeStr: String
+    if let portType = currentOutput?.portType {
+      switch portType {
+      case .builtInSpeaker:   routeStr = "speaker"
+      case .builtInReceiver:  routeStr = "earpiece"
+      case .bluetoothHFP,
+           .bluetoothA2DP,
+           .bluetoothLE:      routeStr = "bluetooth"
+      case .headphones,
+           .headsetMic:       routeStr = "wired_headset"
+      default:                routeStr = "unknown"
+      }
+    } else {
+      routeStr = "unknown"
+    }
+    
+    channel?.invokeMethod("onAudioRouteChanged", arguments: ["route": routeStr])
+    
+    guard isListening, let sink = eventSink else { return }
     let devices = getAvailableDevices(session: session)
     sink(["event": "devices_changed", "devices": devices])
     
+    var eventData: [String: Any] = [
+      "event": "route_changed",
+      "route": routeStr
+    ]
     if let route = getCurrentAudioRoute(session: session) {
-      sink(["event": "route_changed", "device": route])
+      eventData["device"] = route
     }
+    sink(eventData)
   }
 
   @objc private func handleInterruption(notification: Notification) {
@@ -482,26 +514,100 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     result(routeResult(success: attempt.success, status: attempt.status, requestedDevice: requestedDevice, actualDevice: getCurrentAudioRoute(session: session), message: attempt.message, errorCode: attempt.errorCode))
   }
 
-  private func clearAudioRoute(session: AVAudioSession) -> RouteAttempt {
+  private func routeToSpeaker() -> Bool {
     do {
-      try session.overrideOutputAudioPort(.none)
-      try session.setPreferredInput(nil)
-      preferredDeviceId = nil
-      preferredDeviceType = nil
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.playAndRecord,
+                              mode: .voiceChat,
+                              options: [.allowBluetooth, .allowBluetoothA2DP])
+      try session.setActive(true)
+      try session.overrideOutputAudioPort(.speaker)
+      preferredDeviceId = "speaker"
+      preferredDeviceType = "speaker"
+      log("Speaker override activated. preferredDeviceType set to speaker")
       handleRouteChange(notification: Notification(name: AVAudioSession.routeChangeNotification))
-      return RouteAttempt(success: true, status: "cleared", message: "Audio route returned to iOS default routing.", errorCode: nil)
+      return true
     } catch {
-      return RouteAttempt(success: false, status: "error", message: "Failed to clear audio route: \(error.localizedDescription)", errorCode: "AVAUDIOSESSION_ERROR")
+      log("[VoipAudio] routeToSpeaker error: \(error)")
+      return false
     }
   }
 
-  private func endCallSession(session: AVAudioSession) {
-    _ = clearAudioRoute(session: session)
+  private func routeToEarpiece() -> Bool {
     do {
-      try session.setActive(false, options: .notifyOthersOnDeactivation)
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.playAndRecord,
+                              mode: .voiceChat,
+                              options: [.allowBluetooth, .allowBluetoothA2DP])
+      try session.setActive(true)
+      try session.overrideOutputAudioPort(.none)
+      try session.setPreferredInput(nil)
+      preferredDeviceId = "receiver"
+      preferredDeviceType = "receiver"
+      log("Speaker override cleared, preferred input cleared (earpiece default). preferredDeviceType set to receiver")
+      handleRouteChange(notification: Notification(name: AVAudioSession.routeChangeNotification))
+      return true
     } catch {
-      log("Failed to deactivate AVAudioSession: \(error.localizedDescription)")
+      log("[VoipAudio] routeToEarpiece error: \(error)")
+      return false
     }
+  }
+
+  private func clearAudioRoute(session: AVAudioSession) {
+    try? session.overrideOutputAudioPort(.none)
+    try? session.setPreferredInput(nil)
+    preferredDeviceId = nil
+    preferredDeviceType = nil
+    try? session.setActive(false, options: .notifyOthersOnDeactivation)
+    handleRouteChange(notification: Notification(name: AVAudioSession.routeChangeNotification))
+  }
+
+  private func endCallSession(session: AVAudioSession) {
+    clearAudioRoute(session: session)
+  }
+
+  private func getAvailableRoutesList(session: AVAudioSession) -> [[String: Any]] {
+    var routes: [[String: Any]] = []
+    
+    // speaker
+    routes.append([
+      "type": "speaker",
+      "id": "speaker".hashValue,
+      "name": "Speaker"
+    ])
+    
+    // receiver (earpiece)
+    if UIDevice.current.userInterfaceIdiom == .phone {
+      routes.append([
+        "type": "earpiece",
+        "id": "receiver".hashValue,
+        "name": "Earpiece"
+      ])
+    }
+    
+    if let availableInputs = session.availableInputs {
+      for input in availableInputs {
+        let portType = input.portType
+        var type = "unknown"
+        
+        if portType == .bluetoothHFP || portType == .bluetoothLE {
+          type = "bluetooth"
+        } else if portType == .headsetMic || portType == .lineIn {
+          type = "wired_headset"
+        } else if portType == .usbAudio {
+          type = "wired_headset"
+        } else {
+          continue
+        }
+        
+        routes.append([
+          "type": type,
+          "id": input.uid.hashValue,
+          "name": input.portName
+        ])
+      }
+    }
+    return routes
   }
 
   private func routeResult(

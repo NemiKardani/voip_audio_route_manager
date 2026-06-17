@@ -149,15 +149,7 @@ abstract class VoipAudioRouteManagerPlatform extends PlatformInterface {
   }
 
   /// Clears a previously requested route and returns to platform default routing.
-  Future<AudioRouteResult> clearAudioRoute() async {
-    final actual = await currentAudioRoute();
-    return AudioRouteResult(
-      success: true,
-      status: AudioRouteStatus.cleared,
-      actualDevice: actual,
-      message: 'No explicit audio route was active for this platform.',
-    );
-  }
+  Future<void> clearAudioRoute() async {}
 
   /// Emits updates containing the full list of available devices (including selection status).
   Stream<List<AudioOutputDevice>> get audioDevicesStream {
@@ -203,5 +195,25 @@ abstract class VoipAudioRouteManagerPlatform extends PlatformInterface {
   /// On other platforms, this resolves to null.
   Future<AudioOutputDevice?> selectAudioOutput({String? deviceId}) {
     return Future.value(null);
+  }
+
+  /// Returns the list of currently available audio output routes.
+  Future<List<dynamic>> getAvailableRoutes() {
+    throw UnimplementedError('getAvailableRoutes() has not been implemented.');
+  }
+
+  /// Switches the audio output to speaker.
+  Future<bool> switchToSpeaker() {
+    throw UnimplementedError('switchToSpeaker() has not been implemented.');
+  }
+
+  /// Switches the audio output to earpiece.
+  Future<bool> switchToEarpiece() {
+    throw UnimplementedError('switchToEarpiece() has not been implemented.');
+  }
+
+  /// Stream that emits the current route name whenever it changes.
+  Stream<String> get onRouteChangedStream {
+    throw UnimplementedError('onRouteChangedStream has not been implemented.');
   }
 }
