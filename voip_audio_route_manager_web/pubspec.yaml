@@ -2,7 +2,13 @@ name: voip_audio_route_manager_web
 description: "Web implementation of voip_audio_route_manager. Handles audio route changes and device selection using W3C Audio Output Devices API."
 version: 1.1.0
 homepage: https://github.com/NemiKardani/voip_audio_route_manager
-repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager/voip_audio_route_manager_web
+repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager_web
+topics:
+  - voip
+  - audio-routing
+  - webrtc
+  - audio
+  - media
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

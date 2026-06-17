@@ -1,4 +1,4 @@
-name: Verify Code and AI Review
+name: CI Checks
 
 on:
   push:
@@ -7,9 +7,26 @@ on:
     branches: [ main ]
 
 jobs:
-  analyze-and-test:
-    name: Lint, Format, and Test
+  sanity-checks:
+    name: Check ${{ matrix.package-name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package-name: 'voip_audio_route_manager'
+            path: 'voip_audio_route_manager'
+          - package-name: 'voip_audio_route_manager_android'
+            path: 'voip_audio_route_manager_android'
+          - package-name: 'voip_audio_route_manager_ios'
+            path: 'voip_audio_route_manager_ios'
+          - package-name: 'voip_audio_route_manager_macos'
+            path: 'voip_audio_route_manager_macos'
+          - package-name: 'voip_audio_route_manager_platform_interface'
+            path: 'voip_audio_route_manager_platform_interface'
+          - package-name: 'voip_audio_route_manager_web'
+            path: 'voip_audio_route_manager_web'
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -18,37 +35,37 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Get dependencies across all packages
-        run: |
-          for dir in voip_audio_route_manager_platform_interface voip_audio_route_manager_android voip_audio_route_manager_ios voip_audio_route_manager_macos voip_audio_route_manager_web voip_audio_route_manager; do
-            echo "=== Getting dependencies in $dir ==="
-            (cd $dir && flutter pub get)
-          done
+      - name: Get dependencies
+        working-directory: ${{ matrix.path }}
+        run: flutter pub get
 
       - name: Verify Formatting
-        run: |
-          for dir in voip_audio_route_manager_platform_interface voip_audio_route_manager_android voip_audio_route_manager_ios voip_audio_route_manager_macos voip_audio_route_manager_web voip_audio_route_manager; do
-            echo "=== Checking formatting in $dir ==="
-            (cd $dir && dart format --output=none --set-exit-if-changed .)
-          done
+        working-directory: ${{ matrix.path }}
+        run: dart format --output=none --set-exit-if-changed .
 
       - name: Run Static Analysis
-        run: |
-          for dir in voip_audio_route_manager_platform_interface voip_audio_route_manager_android voip_audio_route_manager_ios voip_audio_route_manager_macos voip_audio_route_manager_web voip_audio_route_manager; do
-            echo "=== Analyzing $dir ==="
-            (cd $dir && flutter analyze)
-          done
+        working-directory: ${{ matrix.path }}
+        run: flutter analyze
 
-      - name: Run Unit Tests
+      - name: Run Unit & Widget Tests
+        working-directory: ${{ matrix.path }}
         run: |
-          cd voip_audio_route_manager && flutter test
+          if [ -d "test" ]; then
+            flutter test
+          else
+            echo "No test/ directory found. Skipping tests."
+          fi
+
+      - name: Pub.dev Publish Dry-Run
+        working-directory: ${{ matrix.path }}
+        run: flutter pub publish --dry-run
 
   gemini-review:
     name: Gemini AI Code Review

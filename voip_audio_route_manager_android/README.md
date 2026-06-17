@@ -12,7 +12,7 @@ To install the main package, add:
 
 ```yaml
 dependencies:
-  voip_audio_route_manager: ^0.0.1
+  voip_audio_route_manager: ^1.1.0
 ```
 
 ## Android Permissions
