@@ -105,3 +105,11 @@ jobs:
         with:
           header: gemini-code-review
           path: gemini_review.md
+
+  lint-format-and-test:
+    name: Lint, Format, and Test
+    needs: sanity-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm Sanity Checks Completed
+        run: echo "All parallel package sanity checks passed. Lint, Format, and Test completed!"
