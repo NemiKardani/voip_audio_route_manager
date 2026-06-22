@@ -1,3 +1,10 @@
+## 1.1.1 - 2026-06-22
+
+### Fixed
+- Automatically detect CallKit and WebRTC active calls using `CXCallObserver` and audio session mode checks to prevent `AVAudioSession` conflicts.
+- Bypass calling `AVAudioSession.sharedInstance().setActive(true/false)` when a VoIP session is already active.
+- Prevent `clearAudioRoute` from deactivating the active audio session.
+
 ## 1.1.0 - 2026-06-17
 
 ### Added

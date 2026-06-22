@@ -1,3 +1,10 @@
+## 1.1.1 - 2026-06-22
+
+### Fixed
+- iOS: Automatically detect active CallKit or WebRTC sessions and bypass native `setActive(true/false)` calls to prevent conflicts and call disconnects.
+- iOS: Prevent `clearAudioRoute` from deactivating the active call session.
+- iOS: Synchronized Swift Package Manager (SPM) and CocoaPods implementations to resolve missing methods.
+
 ## 1.1.0 - 2026-06-17
 
 ### Added
