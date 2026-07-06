@@ -4,17 +4,17 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'voip_audio_route_manager_macos'
-  s.version          = '0.0.1'
-  s.summary          = 'A new Flutter plugin project.'
+  s.version          = '1.1.2'
+  s.summary          = 'macOS implementation of voip_audio_route_manager. Handles audio route changes and preferred device selection using native AVAudioSession configuration.'
   s.description      = <<-DESC
-A new Flutter plugin project.
+ VoIP Audio Route Manager: A production-ready Flutter package for advanced audio output device management and routing for VoIP communication applications.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/NemiKardani/voip_audio_route_manager'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'Your Company' => 'nemikardani6867@gmail.com' }
 
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'voip_audio_route_manager_macos/Sources/voip_audio_route_manager_macos/**/*'
 
   # If your plugin requires a privacy manifest, for example if it collects user
   # data, update the PrivacyInfo.xcprivacy file to describe your plugin's

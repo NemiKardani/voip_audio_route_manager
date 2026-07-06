@@ -28,6 +28,16 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     eventChannel.setStreamHandler(instance)
   }
 
+  // MARK: - Plugin lifecycle
+
+  public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
+    NotificationCenter.default.removeObserver(self)
+    channel?.setMethodCallHandler(nil)
+    channel = nil
+    eventSink = nil
+    isListening = false
+  }
+
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let session = AVAudioSession.sharedInstance()
 
@@ -45,6 +55,14 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     case "currentAudioRoute":
       result(getCurrentAudioRoute(session: session))
     case "startCallSession":
+      preferredDeviceType = nil
+      preferredDeviceId = nil
+      do {
+        try session.overrideOutputAudioPort(.none)
+        try session.setPreferredInput(nil)
+      } catch {
+        log("startCallSession: failed to reset audio port/input: \(error.localizedDescription)")
+      }
       ensurePlayAndRecordCategory(session: session)
       result(nil)
     case "endCallSession":
@@ -140,7 +158,27 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     )
   }
 
+  // MARK: - Notification handling (thread-safe entry points)
+  //
+  // AVAudioSession posts these notifications on an arbitrary (often background)
+  // thread. All Flutter channel calls and all mutation of shared state
+  // (preferredDeviceType / preferredDeviceId) must happen on the main thread,
+  // otherwise this plugin has a data race with `applyAudioRoute`, which runs
+  // on the main thread via `handle(_:result:)`. That race is the most likely
+  // cause of routes silently reverting to Bluetooth right after being forced
+  // to the earpiece.
+
   @objc private func handleRouteChange(notification: Notification) {
+    if Thread.isMainThread {
+      handleRouteChangeOnMain(notification: notification)
+    } else {
+      DispatchQueue.main.async { [weak self] in
+        self?.handleRouteChangeOnMain(notification: notification)
+      }
+    }
+  }
+
+  private func handleRouteChangeOnMain(notification: Notification) {
     log("Audio route changed notification received.")
     let session = AVAudioSession.sharedInstance()
 
@@ -161,6 +199,10 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
       routeStr = "unknown"
     }
 
+    // EXPERIMENTAL — see method doc comment below for caveats. Reacts to
+    // undocumented CallKit/AVAudioSession menu behavior; verify on-device.
+    reinforceBluetoothPreferredInputIfActive(session: session)
+
     channel?.invokeMethod("onAudioRouteChanged", arguments: ["route": routeStr])
 
     guard isListening, let sink = eventSink else { return }
@@ -178,6 +220,16 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   }
 
   @objc private func handleInterruption(notification: Notification) {
+    if Thread.isMainThread {
+      handleInterruptionOnMain(notification: notification)
+    } else {
+      DispatchQueue.main.async { [weak self] in
+        self?.handleInterruptionOnMain(notification: notification)
+      }
+    }
+  }
+
+  private func handleInterruptionOnMain(notification: Notification) {
     guard let userInfo = notification.userInfo,
           let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
           let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
@@ -226,8 +278,11 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
       "type": "speaker"
     ])
 
-    // 2. Built-in Receiver (Earpiece) - Only available on iPhone
-    if UIDevice.current.userInterfaceIdiom == .phone {
+    // 2. Built-in Receiver (Earpiece) - Only available on iPhone natively when no external device is connected
+    // or if it's the currently active route.
+    let showEarpiece = UIDevice.current.userInterfaceIdiom == .phone &&
+      (!hasExternalDeviceConnected(session: session) || isReceiverActive(session: session))
+    if showEarpiece {
       rawDevices.append([
         "id": "receiver",
         "name": "Earpiece",
@@ -270,7 +325,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
         let name = output.portName
         let type = name.lowercased().contains("airpods") ? "airpods" : "bluetooth"
 
-        // Add if not already listed
+        // Add if not already listed (deduplicate by id to prevent showing duplicates for same device)
         if !rawDevices.contains(where: { ($0["id"] as? String) == id }) {
           rawDevices.append([
             "id": id,
@@ -330,10 +385,11 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
            currentActiveType == "bluetooth" || currentActiveType == "airpods" || currentActiveType == "carAudio" {
           shouldOverride = true
         } else if currentActiveType == "speaker" || currentActiveType == "receiver" {
-          let isBluetoothPreferredAndConnected = (preferredType == "bluetooth" || preferredType == "airpods") && hasBluetooth
-          let isWiredPreferredAndConnected = (preferredType == "wiredHeadset" || preferredType == "usbAudio") && hasWired
-          if !isBluetoothPreferredAndConnected && !isWiredPreferredAndConnected {
+          let wasHeadset = preferredType == "bluetooth" || preferredType == "airpods" || preferredType == "wiredHeadset" || preferredType == "usbAudio"
+          if wasHeadset {
             shouldOverride = true
+          } else {
+            shouldOverride = false
           }
         }
 
@@ -342,7 +398,6 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
           preferredDeviceType = currentActiveType
           preferredDeviceId = currentActiveId
         }
-
       }
     }
 
@@ -385,7 +440,10 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
 
   private func getCurrentAudioRoute(session: AVAudioSession) -> [String: Any]? {
     let devices = getAvailableDevices(session: session)
-    return devices.first(where: { ($0["isSelected"] as? Bool) == true }) ?? devices.first
+    let selected = devices.first(where: { ($0["isSelected"] as? Bool) == true }) ?? devices.first
+    let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+    log("getCurrentAudioRoute: preferredType=\(preferredDeviceType ?? "nil"), active outputs=\(outputs), selected=\(selected ?? [:])")
+    return selected
   }
 
   private func isSpeakerActive(session: AVAudioSession) -> Bool {
@@ -396,21 +454,62 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     return session.currentRoute.outputs.contains { $0.portType == .builtInReceiver }
   }
 
+  private func hasExternalDeviceConnected(session: AVAudioSession) -> Bool {
+    if let availableInputs = session.availableInputs {
+      for input in availableInputs {
+        let portType = input.portType
+        if portType == .bluetoothHFP || portType == .bluetoothLE ||
+           portType == .headsetMic || portType == .lineIn ||
+           portType == .usbAudio || portType == .carAudio {
+          return true
+        }
+      }
+    }
+    for output in session.currentRoute.outputs {
+      let portType = output.portType
+      if portType == .bluetoothA2DP ||
+         portType == .bluetoothLE ||
+         portType == .bluetoothHFP ||
+         portType == .headphones ||
+         portType == .lineOut ||
+         portType == .usbAudio ||
+         portType == .carAudio {
+        return true
+      }
+    }
+    return false
+  }
+
   private func isPortActive(session: AVAudioSession, portUID: String) -> Bool {
     return session.currentRoute.outputs.contains { $0.uid == portUID } ||
            session.currentRoute.inputs.contains { $0.uid == portUID }
   }
 
-  private func ensurePlayAndRecordCategory(session: AVAudioSession) {
-    if session.category != .playAndRecord {
+  // MARK: - Category management
+
+  private func ensurePlayAndRecordCategory(session: AVAudioSession, options: AVAudioSession.CategoryOptions = [.allowBluetooth, .allowBluetoothA2DP]) {
+    log("ensurePlayAndRecordCategory starting. Category: \(session.category.rawValue), Options: \(session.categoryOptions), requestedOptions: \(options)")
+
+    // If CallKit currently owns an active call, avoid fighting it for session
+    // configuration. CallKit configures AVAudioSession itself around provider
+    // callbacks (didActivate/didDeactivate); mutating category here concurrently
+    // can silently lose to CallKit's own configuration, which is a common source
+    // of routes that appear to "not stick".
+    let callObserver = CXCallObserver()
+    if !callObserver.calls.isEmpty {
+      log("ensurePlayAndRecordCategory: Active CallKit call detected — skipping category mutation to avoid conflicting with CallKit's own AVAudioSession configuration.")
+      return
+    }
+
+    if session.category != .playAndRecord || session.categoryOptions != options {
       do {
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .allowBluetoothA2DP])
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: options)
         if shouldManageActiveState() {
           try session.setActive(true, options: .notifyOthersOnDeactivation)
         }
-        log("AVAudioSession category set to playAndRecord with voiceChat mode.")
+        log("ensurePlayAndRecordCategory: AVAudioSession category set to playAndRecord with voiceChat mode, options: \(options).")
       } catch {
-        log("Failed to set AVAudioSession category to playAndRecord: \(error.localizedDescription)")
+        log("ensurePlayAndRecordCategory: Failed to set AVAudioSession category to playAndRecord: \(error.localizedDescription)")
       }
     }
   }
@@ -425,28 +524,42 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   }
 
   private func applyAudioRoute(deviceId: String, session: AVAudioSession) -> RouteAttempt {
-    ensurePlayAndRecordCategory(session: session)
     do {
       if deviceId == "speaker" {
+        // Bluetooth eligibility doesn't matter here since overrideOutputAudioPort(.speaker)
+        // is an explicit forced override that wins regardless of category options.
+        ensurePlayAndRecordCategory(session: session, options: [.allowBluetooth, .allowBluetoothA2DP])
         try session.overrideOutputAudioPort(.speaker)
         preferredDeviceId = "speaker"
         preferredDeviceType = "speaker"
         log("Speaker override activated. preferredDeviceType set to speaker")
         return RouteAttempt(success: true, status: "success", message: "Audio route changed successfully.", errorCode: nil)
       } else if deviceId == "receiver" {
-        if UIDevice.current.userInterfaceIdiom != .phone {
-          return RouteAttempt(success: false, status: "unsupported", message: "Earpiece is not supported on this device", errorCode: "UNSUPPORTED_DEVICE")
-        }
+        // IMPORTANT: There is no explicit "earpiece" override in AVAudioSession.
+        // overrideOutputAudioPort(.none) only resumes automatic routing, and automatic
+        // routing always prefers a connected Bluetooth device over the built-in receiver.
+        // The only way to force the earpiece while BT is still connected is to make BT
+        // ineligible first by removing .allowBluetooth / .allowBluetoothA2DP from the
+        // category options, then let automatic routing fall back to the receiver.
+        ensurePlayAndRecordCategory(session: session, options: [])
         try session.overrideOutputAudioPort(.none)
-        try session.setPreferredInput(nil)
+        if let availableInputs = session.availableInputs,
+           let builtInMic = availableInputs.first(where: { $0.portType == .builtInMic }) {
+          try session.setPreferredInput(builtInMic)
+          log("Bluetooth disallowed, speaker override cleared, preferred input set to builtInMic (earpiece forced).")
+        } else {
+          try session.setPreferredInput(nil)
+          log("Bluetooth disallowed, speaker override cleared, preferred input cleared (earpiece default).")
+        }
         preferredDeviceId = "receiver"
         preferredDeviceType = "receiver"
-        log("Speaker override cleared, preferred input cleared (earpiece default). preferredDeviceType set to receiver")
         return RouteAttempt(success: true, status: "success", message: "Audio route changed successfully.", errorCode: nil)
       } else {
         // Bluetooth / Wired Headset
         if let availableInputs = session.availableInputs {
           if let match = availableInputs.first(where: { $0.uid == deviceId }) {
+            // Re-enable Bluetooth eligibility in case a prior "receiver" route disabled it.
+            ensurePlayAndRecordCategory(session: session, options: [.allowBluetooth, .allowBluetoothA2DP])
             try session.overrideOutputAudioPort(.none)
             try session.setPreferredInput(match)
             preferredDeviceId = deviceId
@@ -463,6 +576,10 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   }
 
   private func setRouteByType(typeStr: String, session: AVAudioSession, result: FlutterResult) {
+    if typeStr == "receiver" && UIDevice.current.userInterfaceIdiom != .phone {
+      setAudioRoute(deviceId: "receiver", session: session, result: result)
+      return
+    }
     let devices = getAvailableDevices(session: session)
     if let match = devices.first(where: { ($0["type"] as? String) == typeStr }),
        let id = match["id"] as? String {
@@ -494,6 +611,11 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   }
 
   private func selectRouteByType(typeStr: String, session: AVAudioSession, result: FlutterResult) {
+    if typeStr == "receiver" && UIDevice.current.userInterfaceIdiom != .phone {
+      let attempt = applyAudioRoute(deviceId: "receiver", session: session)
+      result(routeResult(success: attempt.success, status: attempt.status, requestedDevice: nil, actualDevice: getCurrentAudioRoute(session: session), message: attempt.message, errorCode: attempt.errorCode))
+      return
+    }
     let requested = getAvailableDevices(session: session).first { ($0["type"] as? String) == typeStr }
     guard let requestedDevice = requested,
           let id = requestedDevice["id"] as? String else {
@@ -520,12 +642,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   private func routeToSpeaker() -> Bool {
     do {
       let session = AVAudioSession.sharedInstance()
-      try session.setCategory(.playAndRecord,
-                              mode: .voiceChat,
-                              options: [.allowBluetooth, .allowBluetoothA2DP])
-      if shouldManageActiveState() {
-        try session.setActive(true)
-      }
+      ensurePlayAndRecordCategory(session: session, options: [.allowBluetooth, .allowBluetoothA2DP])
       try session.overrideOutputAudioPort(.speaker)
       preferredDeviceId = "speaker"
       preferredDeviceType = "speaker"
@@ -533,7 +650,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
       handleRouteChange(notification: Notification(name: AVAudioSession.routeChangeNotification))
       return true
     } catch {
-      log("[VoipAudio] routeToSpeaker error: \(error)")
+      log("routeToSpeaker error: \(error)")
       return false
     }
   }
@@ -541,28 +658,36 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   private func routeToEarpiece() -> Bool {
     do {
       let session = AVAudioSession.sharedInstance()
-      try session.setCategory(.playAndRecord,
-                              mode: .voiceChat,
-                              options: [.allowBluetooth, .allowBluetoothA2DP])
-      if shouldManageActiveState() {
-        try session.setActive(true)
-      }
+      // Strip .allowBluetooth / .allowBluetoothA2DP so a connected BT device becomes
+      // ineligible; only then will automatic routing fall back to the built-in receiver.
+      // (overrideOutputAudioPort(.none) alone does nothing here because it just resumes
+      // automatic routing, which still prefers BT if BT remains eligible.)
+      ensurePlayAndRecordCategory(session: session, options: [])
       try session.overrideOutputAudioPort(.none)
-      try session.setPreferredInput(nil)
+      if let availableInputs = session.availableInputs,
+         let builtInMic = availableInputs.first(where: { $0.portType == .builtInMic }) {
+        try session.setPreferredInput(builtInMic)
+      } else {
+        try session.setPreferredInput(nil)
+      }
       preferredDeviceId = "receiver"
       preferredDeviceType = "receiver"
-      log("Speaker override cleared, preferred input cleared (earpiece default). preferredDeviceType set to receiver")
+      log("Bluetooth disallowed, speaker override cleared, preferred input cleared (earpiece default). preferredDeviceType set to receiver")
       handleRouteChange(notification: Notification(name: AVAudioSession.routeChangeNotification))
       return true
     } catch {
-      log("[VoipAudio] routeToEarpiece error: \(error)")
+      log("routeToEarpiece error: \(error)")
       return false
     }
   }
 
   private func clearAudioRoute(session: AVAudioSession) {
-    try? session.overrideOutputAudioPort(.none)
-    try? session.setPreferredInput(nil)
+    do {
+      try session.overrideOutputAudioPort(.none)
+      try session.setPreferredInput(nil)
+    } catch {
+      log("clearAudioRoute: failed to reset audio port/input: \(error.localizedDescription)")
+    }
     preferredDeviceId = nil
     preferredDeviceType = nil
     handleRouteChange(notification: Notification(name: AVAudioSession.routeChangeNotification))
@@ -571,25 +696,35 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   private func endCallSession(session: AVAudioSession) {
     clearAudioRoute(session: session)
     if shouldManageActiveState() {
-      try? session.setActive(false, options: .notifyOthersOnDeactivation)
+      do {
+        try session.setActive(false, options: .notifyOthersOnDeactivation)
+      } catch {
+        log("endCallSession: failed to deactivate session: \(error.localizedDescription)")
+      }
     }
   }
 
   private func getAvailableRoutesList(session: AVAudioSession) -> [[String: Any]] {
+    // NOTE: `id` is now the stable AVAudioSession port UID string (or a fixed
+    // literal for speaker/receiver) instead of Swift's randomly-seeded
+    // String.hashValue. hashValue is reseeded every process launch, so the old
+    // IDs were not stable across app relaunches. This is a breaking change to
+    // the platform channel contract if any Dart code parses `id` as an int —
+    // update the Dart model to treat `id` as a String before shipping.
     var routes: [[String: Any]] = []
 
-    // speaker
     routes.append([
       "type": "speaker",
-      "id": "speaker".hashValue,
+      "id": "speaker",
       "name": "Speaker"
     ])
 
-    // receiver (earpiece)
-    if UIDevice.current.userInterfaceIdiom == .phone {
+    let showEarpiece = UIDevice.current.userInterfaceIdiom == .phone &&
+      (!hasExternalDeviceConnected(session: session) || isReceiverActive(session: session))
+    if showEarpiece {
       routes.append([
         "type": "earpiece",
-        "id": "receiver".hashValue,
+        "id": "receiver",
         "name": "Earpiece"
       ])
     }
@@ -611,7 +746,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
 
         routes.append([
           "type": type,
-          "id": input.uid.hashValue,
+          "id": input.uid,
           "name": input.portName
         ])
       }
@@ -660,5 +795,56 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     }
 
     return true
+  }
+
+  // MARK: - Experimental: influence CallKit's native audio-route sheet
+  //
+  // UNDOCUMENTED BEHAVIOR WARNING: The native CallKit in-call audio-route
+  // sheet (the system UI, not this plugin's own picker) is built and
+  // populated entirely by iOS using a private heuristic over AVAudioSession
+  // category options and the current active route. There is no public API to
+  // filter, hide, or reorder entries in that sheet.
+  //
+  // Observed behavior this method targets: after overriding to Speaker while
+  // Bluetooth is connected, the native sheet omits the earpiece ("iPhone")
+  // row and shows only Speaker + Bluetooth. After the user then taps the
+  // Bluetooth entry from that same sheet, the earpiece row reappears as an
+  // option, even though category options (.allowBluetooth /
+  // .allowBluetoothA2DP) have not changed between the two states.
+  //
+  // This method re-asserts the Bluetooth input as the explicit preferred
+  // input once Bluetooth becomes the active route, WITHOUT touching category
+  // options (removing .allowBluetooth/.allowBluetoothA2DP while Bluetooth is
+  // active would make BT ineligible and force an immediate fallback away
+  // from it, which is not the goal). This is an experiment to see whether
+  // reinforcing the preferred input changes what the native sheet offers as
+  // alternatives — it is not guaranteed to have any effect, and the
+  // underlying heuristic may change across iOS versions or devices. Verify
+  // on a real device with a real active call; this cannot be validated in a
+  // simulator.
+  private func reinforceBluetoothPreferredInputIfActive(session: AVAudioSession) {
+    let isBluetoothActive = session.currentRoute.outputs.contains {
+      $0.portType == .bluetoothHFP || $0.portType == .bluetoothA2DP || $0.portType == .bluetoothLE
+    }
+    guard isBluetoothActive else { return }
+
+    guard let availableInputs = session.availableInputs,
+          let btInput = availableInputs.first(where: {
+            $0.portType == .bluetoothHFP || $0.portType == .bluetoothLE
+          }) else {
+      return
+    }
+
+    // Avoid redundant calls if this input is already preferred.
+    if session.preferredInput?.uid == btInput.uid {
+      return
+    }
+
+    do {
+      try session.setPreferredInput(btInput)
+      log("reinforceBluetoothPreferredInputIfActive: re-asserted preferred input to \(btInput.portName)")
+    } catch {
+      log("reinforceBluetoothPreferredInputIfActive: failed to set preferred input: \(error.localizedDescription)")
+    }
   }
 }
