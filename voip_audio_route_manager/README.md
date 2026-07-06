@@ -7,7 +7,7 @@
 [![Build Status](https://github.com/NemiKardani/voip_audio_route_manager/actions/workflows/ci_checks.yml/badge.svg)](https://github.com/NemiKardani/voip_audio_route_manager/actions)
 [![GitHub Stars](https://img.shields.io/github/stars/NemiKardani/voip_audio_route_manager.svg)](https://github.com/NemiKardani/voip_audio_route_manager/stargazers)
 
-A production-ready Flutter package for advanced audio output device management and routing, specifically designed for VoIP communication applications (WebRTC, SIP/VoIP, custom calling engines).
+A production-ready Flutter package for advanced audio output device management, selection, and routing. Easily toggle speakerphone, earpiece, wired headsets, and Bluetooth devices. Specifically designed for VoIP communication applications (WebRTC, SIP/VoIP, custom calling engines, and CallKit integrations).
 
 Compatible with **Android**, **iOS**, **macOS**, and **Web**.
 
@@ -242,4 +242,14 @@ We welcome contributions! This project is structured as a **Federated Flutter Pl
 If you want to help improve this package:
 1. Read our **[Contributing Guide](https://github.com/NemiKardani/voip_audio_route_manager/blob/main/doc/CONTRIBUTING.md)** for details on repository scaffolding, setting up FVM, and running tests locally.
 2. Open an issue or submit a Pull Request. Please ensure all sanity checks and tests pass in the CI/CD pipeline before requesting review.
-```
+
+---
+
+## Keywords & Search Terms
+
+To assist developers searching for this package on pub.dev and search engines, here is a list of relevant indexing keywords and use cases:
+- **Audio Output Selection / Device Router**: Switch audio output between speakerphone, receiver, built-in speaker, earpiece, wired headphones, and Bluetooth headsets.
+- **VoIP Calling & WebRTC**: Designed for WebRTC calling, SIP clients, Zoom-like meetings, Dialers, and voice communication engines.
+- **Platform-Specific Routing APIs**: Integrates with Android `setCommunicationDevice` / SCO fallback, iOS `AVAudioSession` overrides, macOS CoreAudio, and Web MediaDevices API.
+- **Audio Focus & Detection**: Listen to audio focus changes, Bluetooth connection states, and handle headphone plug/unplug events.
+- **Flutter Audio Manager**: Programmatic audio management, speaker toggling, call volume routing, and sound route selection.

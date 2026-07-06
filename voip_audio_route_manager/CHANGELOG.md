@@ -1,3 +1,15 @@
+## 1.1.2 - 2026-07-06
+
+### Changed
+- iOS & macOS: Migrated CocoaPods podspec to use Swift Package Manager (SPM) source paths (`Sources/` directory), unifying the source structure and removing legacy `Classes/` directory.
+- iOS: Changed device `id` in available routes from Swift's unstable, randomly-seeded `String.hashValue` (int) to the stable native AVAudioSession port UID string (e.g., `"speaker"`, `"receiver"`, or input UID).
+
+### Fixed
+- iOS: Fixed automatic earpiece routing by disallowing Bluetooth (removing category options) and explicitly selecting `builtInMic` as preferred input.
+- iOS: Dispatched AVAudioSession route and interruption notification handlers to the main thread to ensure thread safety.
+- iOS: Resets preferred device states and overrides output audio port to `.none` / sets preferred input to `nil` when starting a VoIP call session.
+- iOS: Restricted built-in receiver availability in `getAvailableDevices` to only show when no external device is connected, or when it is the active route.
+
 ## 1.1.1 - 2026-06-22
 
 ### Fixed

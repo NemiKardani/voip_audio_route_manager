@@ -1,3 +1,8 @@
+## 1.1.2 - 2026-07-06
+
+### Changed
+- Migrated CocoaPods podspec to use Swift Package Manager (SPM) source paths (`Sources/` directory) and removed legacy `Classes/` folder.
+
 ## 1.1.0 - 2026-06-16
 
 ### Added
