@@ -325,8 +325,8 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
         let name = output.portName
         let type = name.lowercased().contains("airpods") ? "airpods" : "bluetooth"
 
-        // Add if not already listed (deduplicate by name to prevent showing duplicates for same device)
-        if !rawDevices.contains(where: { ($0["name"] as? String) == name }) {
+        // Add if not already listed (deduplicate by id to prevent showing duplicates for same device)
+        if !rawDevices.contains(where: { ($0["id"] as? String) == id }) {
           rawDevices.append([
             "id": id,
             "name": name,

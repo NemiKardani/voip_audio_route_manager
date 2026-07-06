@@ -1,8 +1,12 @@
 ## 1.1.2 - 2026-07-06
 
+### Breaking Changes
+- **iOS & macOS**: Device `id` formats have changed to stable native UID strings.
+  - **iOS**: Changed device `id` from Swift's unstable, randomly-seeded `String.hashValue` (which was returned as a string representation of an integer) to the stable native `AVAudioSession` port UID string (e.g., `"speaker"`, `"receiver"`, or input UID).
+  - **macOS**: Changed device `id` from a string representation of the transient `AudioDeviceID` (e.g., `"71"`) to the stable native CoreAudio device UID string.
+
 ### Changed
 - iOS & macOS: Migrated CocoaPods podspec to use Swift Package Manager (SPM) source paths (`Sources/` directory), unifying the source structure and removing legacy `Classes/` directory.
-- iOS: Changed device `id` in available routes from Swift's unstable, randomly-seeded `String.hashValue` (int) to the stable native AVAudioSession port UID string (e.g., `"speaker"`, `"receiver"`, or input UID).
 
 ### Fixed
 - iOS: Fixed automatic earpiece routing by disallowing Bluetooth (removing category options) and explicitly selecting `builtInMic` as preferred input.

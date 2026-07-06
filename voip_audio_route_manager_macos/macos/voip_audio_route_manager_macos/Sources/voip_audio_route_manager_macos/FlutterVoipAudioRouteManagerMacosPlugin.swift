@@ -3,6 +3,7 @@ import FlutterMacOS
 import CoreAudio
 
 public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
+  private let queue = DispatchQueue(label: "voip_audio_route_manager_macos.queue")
   private var eventSink: FlutterEventSink?
   private var enableLogs: Bool = false
   private var isListening = false
@@ -40,7 +41,9 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     case "initialize":
       if let args = call.arguments as? [String: Any],
          let enableLogs = args["enableLogs"] as? Bool {
-        self.enableLogs = enableLogs
+        queue.sync {
+          self.enableLogs = enableLogs
+        }
       }
       result(nil)
     case "availableDevices":
@@ -53,9 +56,12 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
       result(nil)
     case "setAudioRoute":
       if let args = call.arguments as? [String: Any],
-         let deviceIdStr = args["id"] as? String,
-         let deviceId = UInt32(deviceIdStr) {
-        setDefaultOutputDevice(deviceID: deviceId, result: result)
+         let deviceIdStr = args["id"] as? String {
+        if let deviceId = getDeviceID(fromUIDorID: deviceIdStr) {
+          setDefaultOutputDevice(deviceID: deviceId, result: result)
+        } else {
+          result(FlutterError(code: "DEVICE_NOT_FOUND", message: "No device matching ID \(deviceIdStr)", details: nil))
+        }
       } else {
         result(FlutterError(code: "INVALID_ARGUMENTS", message: "Device ID required", details: nil))
       }
@@ -75,9 +81,8 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
       }
     case "selectAudioRoute":
       if let args = call.arguments as? [String: Any],
-         let deviceIdStr = args["id"] as? String,
-         let deviceId = UInt32(deviceIdStr) {
-        selectAudioRoute(deviceID: deviceId, result: result)
+         let deviceIdStr = args["id"] as? String {
+        selectAudioRoute(deviceIDStr: deviceIdStr, result: result)
       } else {
         result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "Device ID required", errorCode: "INVALID_ARGUMENTS"))
       }
@@ -110,19 +115,24 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
   }
 
   public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-    self.eventSink = events
-    startListeningToCoreAudio()
+    queue.sync {
+      self.eventSink = events
+      startListeningToCoreAudio()
+    }
     return nil
   }
 
   public func onCancel(withArguments arguments: Any?) -> FlutterError? {
-    stopListeningToCoreAudio()
-    self.eventSink = nil
+    queue.sync {
+      stopListeningToCoreAudio()
+      self.eventSink = nil
+    }
     return nil
   }
 
   private func log(_ message: String) {
-    if enableLogs {
+    let showLogs = queue.sync { enableLogs }
+    if showLogs {
       print("[VoipAudio] [macOS] \(message)")
     }
   }
@@ -140,7 +150,7 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
         let type = inferDeviceType(name: name, uid: uid)
         
         devices.append([
-          "id": String(deviceID),
+          "id": uid.isEmpty ? String(deviceID) : uid,
           "name": name,
           "type": type,
           "isSelected": isSelected
@@ -159,7 +169,7 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     let type = inferDeviceType(name: name, uid: uid)
     
     return [
-      "id": String(defaultDeviceID),
+      "id": uid.isEmpty ? String(defaultDeviceID) : uid,
       "name": name,
       "type": type,
       "isSelected": true
@@ -205,7 +215,7 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     let devices = getAvailableDevices()
     if let match = devices.first(where: { ($0["type"] as? String) == typeStr }),
        let idStr = match["id"] as? String,
-       let deviceId = UInt32(idStr) {
+       let deviceId = getDeviceID(fromUIDorID: idStr) {
       setDefaultOutputDevice(deviceID: deviceId, result: result)
     } else {
       result(FlutterError(code: "DEVICE_NOT_FOUND", message: "No device matching type \(typeStr)", details: nil))
@@ -216,16 +226,17 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     let devices = getAvailableDevices()
     if let match = devices.first(where: { ($0["name"] as? String)?.localizedCaseInsensitiveContains(name) ?? false }),
        let idStr = match["id"] as? String,
-       let deviceId = UInt32(idStr) {
+       let deviceId = getDeviceID(fromUIDorID: idStr) {
       setDefaultOutputDevice(deviceID: deviceId, result: result)
     } else {
       result(FlutterError(code: "DEVICE_NOT_FOUND", message: "No device matching name \(name)", details: nil))
     }
   }
 
-  private func selectAudioRoute(deviceID: AudioDeviceID, result: FlutterResult) {
-    let requested = getAvailableDevices().first { ($0["id"] as? String) == String(deviceID) }
-    guard let requestedDevice = requested else {
+  private func selectAudioRoute(deviceIDStr: String, result: FlutterResult) {
+    let requested = getAvailableDevices().first { ($0["id"] as? String) == deviceIDStr }
+    guard let requestedDevice = requested,
+          let deviceID = getDeviceID(fromUIDorID: deviceIDStr) else {
       result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "No audio output device matched the requested ID.", errorCode: nil))
       return
     }
@@ -238,7 +249,7 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     let requested = getAvailableDevices().first { ($0["type"] as? String) == typeStr }
     guard let requestedDevice = requested,
           let idStr = requestedDevice["id"] as? String,
-          let deviceID = UInt32(idStr) else {
+          let deviceID = getDeviceID(fromUIDorID: idStr) else {
       result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "No audio output device matched type \(typeStr).", errorCode: nil))
       return
     }
@@ -251,7 +262,7 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     let requested = getAvailableDevices().first { ($0["name"] as? String)?.localizedCaseInsensitiveContains(name) ?? false }
     guard let requestedDevice = requested,
           let idStr = requestedDevice["id"] as? String,
-          let deviceID = UInt32(idStr) else {
+          let deviceID = getDeviceID(fromUIDorID: idStr) else {
       result(routeResult(success: false, status: "notFound", requestedDevice: nil, actualDevice: getCurrentAudioRoute(), message: "No audio output device matched name \(name).", errorCode: nil))
       return
     }
@@ -363,9 +374,29 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
     return status == noErr ? (uid as String) : ""
   }
 
+  private func getDeviceID(fromUID uid: String) -> AudioDeviceID? {
+    let deviceIDs = getAllDeviceIDs()
+    for deviceID in deviceIDs {
+      if getDeviceUID(deviceID: deviceID) == uid {
+        return deviceID
+      }
+    }
+    return nil
+  }
+
+  private func getDeviceID(fromUIDorID str: String) -> AudioDeviceID? {
+    if let deviceId = getDeviceID(fromUID: str) {
+      return deviceId
+    }
+    if let rawID = UInt32(str) {
+      return rawID
+    }
+    return nil
+  }
+
   private func inferDeviceType(name: String, uid: String) -> String {
-    let lowerName = name.toLowerCase()
-    let lowerUID = uid.toLowerCase()
+    let lowerName = name.lowercased()
+    let lowerUID = uid.lowercased()
     
     if lowerName.contains("speaker") || lowerName.contains("built-in output") || lowerName.contains("internal speaker") {
       return "speaker"
@@ -413,14 +444,22 @@ public class FlutterVoipAudioRouteManagerMacosPlugin: NSObject, FlutterPlugin, F
   }
 
   fileprivate func notifyDevicesChanged() {
-    DispatchQueue.main.async { [weak self] in
-      guard let self = self, let sink = self.eventSink else { return }
+    queue.async { [weak self] in
+      guard let self = self else { return }
       
       let devices = self.getAvailableDevices()
-      sink(["event": "devices_changed", "devices": devices])
+      let route = self.getCurrentAudioRoute()
       
-      if let route = self.getCurrentAudioRoute() {
-        sink(["event": "route_changed", "device": route])
+      DispatchQueue.main.async { [weak self] in
+        guard let self = self else { return }
+        self.queue.sync {
+          guard let sink = self.eventSink else { return }
+          sink(["event": "devices_changed", "devices": devices])
+          
+          if let route = route {
+            sink(["event": "route_changed", "device": route])
+          }
+        }
       }
     }
   }
@@ -433,8 +472,3 @@ private let coreAudioListenerBlock: AudioObjectPropertyListenerProc = { (inObjec
   return noErr
 }
 
-extension String {
-  func toLowerCase() -> String {
-    return self.lowercased()
-  }
-}
