@@ -1,32 +1,11 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/your-org/voip_audio_route_manager/main/assets/logo.png" alt="VoIP Audio Route Manager - Flutter Package for Audio Output Device Switching" width="180">
-</p>
-
 <h1 align="center">VoIP Audio Route Manager</h1>
 
-<p align="center">
-  <a href="https://pub.dev/packages/voip_audio_route_manager">
-    <img src="https://img.shields.io/pub/v/voip_audio_route_manager.svg?logo=dart&logoColor=white" alt="pub.dev version">
-  </a>
-  <a href="https://pub.dev/packages/voip_audio_route_manager/score">
-    <img src="https://img.shields.io/pub/points/voip_audio_route_manager?logo=dart&logoColor=white" alt="pub points">
-  </a>
-  <a href="https://pub.dev/packages/voip_audio_route_manager">
-    <img src="https://img.shields.io/pub/popularity/voip_audio_route_manager?logo=dart&logoColor=white" alt="popularity">
-  </a>
-  <a href="https://pub.dev/packages/voip_audio_route_manager">
-    <img src="https://img.shields.io/pub/likes/voip_audio_route_manager?logo=dart&logoColor=white" alt="likes">
-  </a>
-  <a href="https://github.com/your-org/voip_audio_route_manager/actions">
-    <img src="https://github.com/your-org/voip_audio_route_manager/workflows/CI/badge.svg" alt="CI Status">
-  </a>
-  <a href="https://codecov.io/gh/your-org/voip_audio_route_manager">
-    <img src="https://codecov.io/gh/your-org/voip_audio_route_manager/branch/main/graph/badge.svg" alt="codecov">
-  </a>
-  <a href="https://opensource.org/licenses/MIT">
-    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License">
-  </a>
-</p>
+[![pub package](https://img.shields.io/pub/v/voip_audio_route_manager.svg?logo=dart&logoColor=white)](https://pub.dev/packages/voip_audio_route_manager)
+[![pub points](https://img.shields.io/pub/points/voip_audio_route_manager.svg)](https://pub.dev/packages/voip_audio_route_manager/score)
+[![Platform](https://img.shields.io/badge/platform-android%20%7C%20ios%20%7C%20macos%20%7C%20web-blue.svg)](https://pub.dev/packages/voip_audio_route_manager)
+[![License: MIT](https://img.shields.io/badge/license-MIT-purple.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/NemiKardani/voip_audio_route_manager/actions/workflows/ci_checks.yml/badge.svg)](https://github.com/NemiKardani/voip_audio_route_manager/actions)
+[![GitHub Stars](https://img.shields.io/github/stars/NemiKardani/voip_audio_route_manager.svg)](https://github.com/NemiKardani/voip_audio_route_manager/stargazers)
 
 <p align="center">
   <b>A production-ready Flutter package for VoIP audio route switching, call audio routing, and Bluetooth audio output device management.</b>
@@ -128,45 +107,6 @@ Then run:
 flutter pub get
 ```
 
-### Platform-Specific Setup
-
-#### Android
-
-No additional setup required for Android 12+ (API 31). For older devices, ensure the following permission is in your `AndroidManifest.xml`:
-
-```xml
-<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-<uses-permission android:name="android.permission.BLUETOOTH" />
-<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-```
-
-> 📘 Learn more about [Android audio routing permissions](https://developer.android.com/reference/android/media/AudioManager).
-
-#### iOS
-
-Add the following to your `ios/Runner/Info.plist`:
-
-```xml
-<key>UIBackgroundModes</key>
-<array>
-  <string>audio</string>
-  <string>voip</string>
-</array>
-```
-
-> 📘 See [Apple's AVAudioSession documentation](https://developer.apple.com/documentation/avfaudio/avaudiosession) for audio session configuration best practices.
-
-#### Web
-
-Ensure your web app requests microphone permissions before enumerating devices:
-
-```dart
-await html.window.navigator.mediaDevices?.getUserMedia({'audio': true});
-```
-
-> 📘 Read more about the [Web MediaDevices API](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices).
-
----
 
 ## Quick Start
 
@@ -479,20 +419,20 @@ Please [open an issue](https://github.com/your-org/voip_audio_route_manager/issu
 
 ## Demo
 
-See real-time audio route switching (speaker ↔ earpiece ↔ Bluetooth ↔ wired headset) in action across platforms:
+See real-time audio route switching (speaker ↔ earpiece ↔ Bluetooth ↔ wired headset) in action:
 
-### Android Demo
+### Android
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/your-org/voip_audio_route_manager/main/assets/demo_android.gif" alt="Android VoIP audio route switching demo - transitions between speakerphone, earpiece, Bluetooth headset, and wired headphones in real time" width="300">
+  <img src="https://github.com/novaquaker866/voip_audio_route_manager/blob/imp/doc-update/doc/Images/voip_audio_route_manager_android_example.gif?raw=true" alt="Android VoIP audio route switching demo - transitions between speakerphone, earpiece, Bluetooth headset, and wired headphones in real time" width="300">
   <br>
   <em>Android: Real-time detection and switching across all connected audio output devices.</em>
 </p>
 
-### Web Demo
+### Web
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/your-org/voip_audio_route_manager/main/assets/demo_web.gif" alt="Web browser audio output device selection demo - listing and switching between speaker, Bluetooth, and headset via MediaDevices API" width="600">
+  <img src="https://github.com/novaquaker866/voip_audio_route_manager/blob/imp/doc-update/doc/Images/voip_audio_route_manager_web_example.gif?raw=true" alt="Web browser audio output device selection demo - listing and switching between speaker, Bluetooth, and headset via MediaDevices API" width="600">
   <br>
   <em>Web: Device labels populate after media permission grant; route changes reflect immediately.</em>
 </p>
