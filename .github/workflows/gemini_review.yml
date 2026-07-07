@@ -1,0 +1,39 @@
+name: Gemini AI Code Review
+
+on:
+  pull_request_target:
+    branches: [ main ]
+
+jobs:
+  gemini-review:
+    name: Gemini AI Code Review
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Fetch PR Diff
+        run: |
+          curl -L \
+            -H "Accept: application/vnd.github.v3.diff" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} > changes.diff
+
+      - name: Run Gemini AI Review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -s changes.diff ] && [ ! -z "$GEMINI_API_KEY" ]; then
+            node scripts/gemini_review.js changes.diff
+          else
+            echo "Skipping review: either diff is empty or GEMINI_API_KEY is not configured."
+            echo "### Gemini Review skipped (no changes or missing API key)" > gemini_review.md
+          fi
+
+      - name: Comment PR with Review
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: gemini-code-review
+          path: gemini_review.md

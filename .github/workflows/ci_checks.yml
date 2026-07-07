@@ -31,16 +31,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
+      - name: Set up Environment
+        uses: ./.github/actions/setup-env
 
       - name: Get dependencies
         working-directory: ${{ matrix.path }}
@@ -68,43 +60,6 @@ jobs:
         run: flutter pub publish --dry-run
         continue-on-error: true
 
-  gemini-review:
-    name: Gemini AI Code Review
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Generate Diff
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git diff origin/main...HEAD > changes.diff
-          else
-            git diff HEAD~1 > changes.diff
-          fi
-        continue-on-error: true
-
-      - name: Run Gemini AI Review
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          if [ -s changes.diff ] && [ ! -z "$GEMINI_API_KEY" ]; then
-            node scripts/gemini_review.js changes.diff
-          else
-            echo "Skipping review: either diff is empty or GEMINI_API_KEY is not configured."
-            echo "### Gemini Review skipped (no changes or missing API key)" > gemini_review.md
-          fi
-
-      - name: Comment PR with Review
-        uses: marocchino/sticky-pull-request-comment@v3
-        if: github.event_name == 'pull_request'
-        with:
-          header: gemini-code-review
-          path: gemini_review.md
 
   lint-format-and-test:
     name: Lint, Format, and Test
