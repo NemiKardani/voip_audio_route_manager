@@ -100,7 +100,7 @@ jobs:
           fi
 
       - name: Comment PR with Review
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         if: github.event_name == 'pull_request'
         with:
           header: gemini-code-review
