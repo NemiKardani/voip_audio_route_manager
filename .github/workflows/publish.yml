@@ -36,16 +36,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
+      - name: Set up Environment
+        uses: ./.github/actions/setup-env
 
       - name: Determine Target Package and Version
         id: determine-target
@@ -121,16 +113,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
+      - name: Set up Environment
+        uses: ./.github/actions/setup-env
 
       - name: Set up Dart OIDC for Pub.dev
         uses: dart-lang/setup-dart@v1
