@@ -1,3 +1,8 @@
+## 1.1.2 - 2026-07-11
+
+### Fixed
+- Modernized Kotlin/Gradle plugin configuration for AGP 9+ compatibility by refactoring compile options from deprecated `kotlinOptions`.
+
 ## 1.1.0 - 2026-06-17
 
 ### Added

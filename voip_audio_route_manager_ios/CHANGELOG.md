@@ -1,3 +1,15 @@
+## 1.1.3 - 2026-07-11
+
+### Fixed
+- Standardized port name lookup to use `"receiver"` instead of `"earpiece"` for consistency across streams.
+- Fixed memory leak/retain cycle in `detachFromEngine` by clearing `CXCallObserver` delegate and invalidating timers.
+- Fixed active audio state conflicts with CallKit by ensuring category state changes are skipped only on truly active calls (rather than any call instance).
+- Track session activation state (`didActivateSession`) to avoid unwanted deactivations of external audio sessions not managed by the plugin.
+- Implemented `CXCallObserverDelegate` to automatically configure the audio category and dispatch events when incoming calls are accepted by the user.
+- Debounced rapid route change notifications (`routeChangeDebounceTimer` with `0.1s` interval) to improve stability and prevent event flooding.
+- Cached results of available devices query (`getAvailableDevices`) with validation to optimize CPU overhead.
+- Prevented redundant preferred input reinforcement on programmatic route changes.
+
 ## 1.1.2 - 2026-07-06
 
 ### Changed

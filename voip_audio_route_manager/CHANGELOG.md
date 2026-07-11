@@ -1,3 +1,16 @@
+## 1.1.3 - 2026-07-11
+
+### Fixed
+- **iOS**: Standardized port name lookup to use `"receiver"` instead of `"earpiece"` for consistency across streams.
+- **iOS**: Fixed memory leak/retain cycle in `detachFromEngine` by clearing `CXCallObserver` delegate and invalidating timers.
+- **iOS**: Fixed active audio state conflicts with CallKit by ensuring category state changes are skipped only on truly active calls (rather than any call instance).
+- **iOS**: Track session activation state (`didActivateSession`) to avoid unwanted deactivations of external audio sessions not managed by the plugin.
+- **iOS**: Implemented `CXCallObserverDelegate` to automatically configure the audio category and dispatch events when incoming calls are accepted by the user.
+- **iOS**: Debounced rapid route change notifications (`routeChangeDebounceTimer` with `0.1s` interval) to improve stability and prevent event flooding.
+- **iOS**: Cached results of available devices query (`getAvailableDevices`) with validation to optimize CPU overhead.
+- **iOS**: Prevented redundant preferred input reinforcement on programmatic route changes.
+- **Android**: Modernized Kotlin/Gradle plugin configuration for AGP 9+ compatibility by refactoring compile options from deprecated `kotlinOptions`.
+
 ## 1.1.2 - 2026-07-06
 
 ### Breaking Changes
