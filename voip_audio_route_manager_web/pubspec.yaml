@@ -3,13 +3,6 @@ description: "Web implementation of voip_audio_route_manager. Handles audio rout
 version: 1.1.0
 homepage: https://github.com/NemiKardani/voip_audio_route_manager
 repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager_web
-topics:
-  - voip
-  - audio-routing
-  - webrtc
-  - audio
-  - media
-
 environment:
   sdk: '>=3.0.0 <4.0.0'
   flutter: '>=3.35.0'
@@ -17,19 +10,49 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  voip_audio_route_manager_platform_interface: ^1.1.0
   web: '>=0.5.0 <2.0.0'
   flutter_web_plugins:
     sdk: flutter
 
-dependency_overrides:
-  voip_audio_route_manager_platform_interface:
-    path: ../voip_audio_route_manager_platform_interface
+
+
+
+
+
+
+
+
+
+
+
+
+
+  # --- Sibling Dependencies (Auto-managed) ---
+  voip_audio_route_manager_platform_interface: ^1.1.0
+  # voip_audio_route_manager_platform_interface:
+  #   path: ../voip_audio_route_manager_platform_interface
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+
+
+
+
+
+
+
+# --- Sibling Overrides (Auto-managed) ---
+dependency_overrides:
+  voip_audio_route_manager_platform_interface:
+    path: ../voip_audio_route_manager_platform_interface
+topics:
+  - voip
+  - audio-routing
+  - webrtc
+  - audio
+  - media
 
 flutter:
   plugin:
@@ -69,3 +92,11 @@ flutter:
   #
   # For details regarding fonts in packages, see
   # https://flutter.dev/to/font-from-package
+
+
+# --- Sibling Overrides (Auto-managed) ---
+
+
+
+
+

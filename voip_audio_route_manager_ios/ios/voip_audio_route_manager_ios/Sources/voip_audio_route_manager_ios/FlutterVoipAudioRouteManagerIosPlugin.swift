@@ -2,7 +2,9 @@ import Flutter
 import UIKit
 import AVFoundation
 import CallKit
+import os.log
 
+@available(iOS 13.0, *)
 public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?
   private var channel: FlutterMethodChannel?
@@ -10,12 +12,24 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   private var isListening = false
   private var preferredDeviceId: String?
   private var preferredDeviceType: String?
+  private let callObserver = CXCallObserver()
+  private var didActivateSession: Bool = false
+  private var cachedDevices: [[String: Any]]?
+  private var cachedDevicesTimestamp: Date?
+  private var routeChangeDebounceTimer: Timer?
+
+  private static let logger = OSLog(subsystem: "com.nemikardani.voip_audio_route_manager", category: "AudioRoute")
 
   private struct RouteAttempt {
     let success: Bool
     let status: String
     let message: String?
     let errorCode: String?
+  }
+
+  override init() {
+    super.init()
+    callObserver.setDelegate(self, queue: .main)
   }
 
   public static func register(with registrar: FlutterPluginRegistrar) {
@@ -36,6 +50,23 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     channel = nil
     eventSink = nil
     isListening = false
+
+    // FIX #1: Remove CallKit delegate to prevent retain cycle
+    callObserver.setDelegate(nil, queue: nil)
+
+    // FIX #1: Deactivate audio session if we manage it
+    if shouldManageActiveState() {
+      let session = AVAudioSession.sharedInstance()
+      do {
+        try session.setActive(false, options: .notifyOthersOnDeactivation)
+      } catch {
+        log("detachFromEngine: failed to deactivate session: \(error.localizedDescription)")
+      }
+    }
+
+    // Clean up debounce timer
+    routeChangeDebounceTimer?.invalidate()
+    routeChangeDebounceTimer = nil
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -57,6 +88,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     case "startCallSession":
       preferredDeviceType = nil
       preferredDeviceId = nil
+      didActivateSession = false
       do {
         try session.overrideOutputAudioPort(.none)
         try session.setPreferredInput(nil)
@@ -136,11 +168,74 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     return nil
   }
 
+  // MARK: - Logging
+
   private func log(_ message: String) {
     if enableLogs {
-      print("[VoipAudio] [iOS] \(message)")
+      os_log("[VoipAudio] [iOS] %{public}@", log: Self.logger, type: .debug, message)
     }
   }
+
+  // MARK: - CallKit Helpers
+
+  private func isIncomingCallActiveAndNotConnected() -> Bool {
+    for call in callObserver.calls {
+      if !call.isOutgoing && !call.hasConnected && !call.hasEnded {
+        return true
+      }
+    }
+    return false
+  }
+
+  private func hasActiveCallKitCall() -> Bool {
+    return callObserver.calls.contains { !$0.hasEnded }
+  }
+
+  // MARK: - Route String Helpers
+
+  private func getRouteString(session: AVAudioSession) -> String {
+    let currentOutput = session.currentRoute.outputs.first
+    if let portType = currentOutput?.portType {
+      switch portType {
+      case .builtInSpeaker:   return "speaker"
+      case .builtInReceiver:  return "receiver"  // FIX #8: Standardized to "receiver"
+      case .bluetoothHFP,
+           .bluetoothA2DP,
+           .bluetoothLE:      return "bluetooth"
+      case .headphones,
+           .headsetMic:       return "wired_headset"
+      default:                return "unknown"
+      }
+    }
+    return "unknown"
+  }
+
+  // MARK: - Event Dispatch
+
+  private func sendRouteAndDevicesEvents(session: AVAudioSession) {
+    guard isListening else { return }
+    guard let sink = eventSink else { return }
+
+    if isIncomingCallActiveAndNotConnected() {
+      log("sendRouteAndDevicesEvents: Incoming call is active but not connected. Skipping stream events.")
+      return
+    }
+
+    let devices = getAvailableDevices(session: session)
+    sink(["event": "devices_changed", "devices": devices])
+
+    let routeStr = getRouteString(session: session)
+    var eventData: [String: Any] = [
+      "event": "route_changed",
+      "route": routeStr
+    ]
+    if let route = getCurrentAudioRoute(session: session) {
+      eventData["device"] = route
+    }
+    sink(eventData)
+  }
+
+  // MARK: - Notification Setup & Handling
 
   private func setupNotifications() {
     NotificationCenter.default.removeObserver(self)
@@ -158,22 +253,17 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     )
   }
 
-  // MARK: - Notification handling (thread-safe entry points)
-  //
-  // AVAudioSession posts these notifications on an arbitrary (often background)
-  // thread. All Flutter channel calls and all mutation of shared state
-  // (preferredDeviceType / preferredDeviceId) must happen on the main thread,
-  // otherwise this plugin has a data race with `applyAudioRoute`, which runs
-  // on the main thread via `handle(_:result:)`. That race is the most likely
-  // cause of routes silently reverting to Bluetooth right after being forced
-  // to the earpiece.
-
+  // OPTIMIZATION #2: Debounce rapid route change notifications
   @objc private func handleRouteChange(notification: Notification) {
-    if Thread.isMainThread {
-      handleRouteChangeOnMain(notification: notification)
-    } else {
-      DispatchQueue.main.async { [weak self] in
-        self?.handleRouteChangeOnMain(notification: notification)
+    routeChangeDebounceTimer?.invalidate()
+    routeChangeDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { [weak self] _ in
+      guard let self = self else { return }
+      if Thread.isMainThread {
+        self.handleRouteChangeOnMain(notification: notification)
+      } else {
+        DispatchQueue.main.async { [weak self] in
+          self?.handleRouteChangeOnMain(notification: notification)
+        }
       }
     }
   }
@@ -181,42 +271,33 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
   private func handleRouteChangeOnMain(notification: Notification) {
     log("Audio route changed notification received.")
     let session = AVAudioSession.sharedInstance()
+    let routeStr = getRouteString(session: session)
 
-    let currentOutput = session.currentRoute.outputs.first
-    let routeStr: String
-    if let portType = currentOutput?.portType {
-      switch portType {
-      case .builtInSpeaker:   routeStr = "speaker"
-      case .builtInReceiver:  routeStr = "earpiece"
-      case .bluetoothHFP,
-           .bluetoothA2DP,
-           .bluetoothLE:      routeStr = "bluetooth"
-      case .headphones,
-           .headsetMic:       routeStr = "wired_headset"
-      default:                routeStr = "unknown"
+    // FIX #3: Consistent behavior with event stream - suppress method channel during incoming calls
+    if !isIncomingCallActiveAndNotConnected() {
+      channel?.invokeMethod("onAudioRouteChanged", arguments: ["route": routeStr])
+    } else {
+      log("handleRouteChangeOnMain: Incoming call active but not connected. Skipping method channel update.")
+    }
+
+    // FIX #5: Only reinforce for external/system changes, not programmatic ones
+    if let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+       let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) {
+      if reason == .newDeviceAvailable || reason == .oldDeviceUnavailable || reason == .unknown {
+        reinforceBluetoothPreferredInputIfActive(session: session)
       }
     } else {
-      routeStr = "unknown"
+      reinforceBluetoothPreferredInputIfActive(session: session)
     }
 
-    // EXPERIMENTAL — see method doc comment below for caveats. Reacts to
-    // undocumented CallKit/AVAudioSession menu behavior; verify on-device.
-    reinforceBluetoothPreferredInputIfActive(session: session)
+    // FIX #2: Sync preferred device state before sending events
+    syncPreferredDeviceWithCurrentRoute(session: session)
 
-    channel?.invokeMethod("onAudioRouteChanged", arguments: ["route": routeStr])
+    // Invalidate device cache on route change
+    cachedDevices = nil
+    cachedDevicesTimestamp = nil
 
-    guard isListening, let sink = eventSink else { return }
-    let devices = getAvailableDevices(session: session)
-    sink(["event": "devices_changed", "devices": devices])
-
-    var eventData: [String: Any] = [
-      "event": "route_changed",
-      "route": routeStr
-    ]
-    if let route = getCurrentAudioRoute(session: session) {
-      eventData["device"] = route
-    }
-    sink(eventData)
+    sendRouteAndDevicesEvents(session: session)
   }
 
   @objc private func handleInterruption(notification: Notification) {
@@ -238,6 +319,10 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
 
     log("Audio session interruption notification received: \(type == .began ? "Began" : "Ended")")
     guard isListening, let sink = eventSink else { return }
+    if isIncomingCallActiveAndNotConnected() {
+      log("handleInterruptionOnMain: Incoming call is active but not connected. Skipping stream events.")
+      return
+    }
 
     if type == .began {
       sink(["event": "audio_focus_changed", "focused": false])
@@ -250,6 +335,8 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
       }
     }
   }
+
+  // MARK: - Port Type Mapping
 
   private func mapPortType(_ portType: AVAudioSession.Port, portName: String) -> String {
     if portType == .builtInSpeaker {
@@ -268,7 +355,16 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     return "unknown"
   }
 
+  // MARK: - Device Discovery
+
   private func getAvailableDevices(session: AVAudioSession) -> [[String: Any]] {
+    // OPTIMIZATION #1: Return cached result if available and recent
+    if let cached = cachedDevices,
+       let timestamp = cachedDevicesTimestamp,
+       Date().timeIntervalSince(timestamp) < 0.1 {
+      return cached
+    }
+
     var rawDevices: [[String: Any]] = []
 
     // 1. Built-in Speaker (Always available)
@@ -291,6 +387,10 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     }
 
     // 3. Bluetooth and Wired outputs from available inputs
+    // NOTE: iOS does not expose a direct "available audio outputs" API.
+    // We infer available outputs from available inputs (for headsets with mics)
+    // and current route outputs (for A2DP devices that may be output-only).
+    // This means output-only Bluetooth speakers may not appear until they become active.
     if let availableInputs = session.availableInputs {
       for input in availableInputs {
         let portType = input.portType
@@ -336,12 +436,67 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
       }
     }
 
-    // Update preferredDeviceType based on current state and connectivity
-    let hasBluetooth = rawDevices.contains {
+    // Get current active route details for isSelected calculation
+    var currentActiveType = "unknown"
+    var currentActiveId = ""
+    for output in session.currentRoute.outputs {
+      let mapped = mapPortType(output.portType, portName: output.portName)
+      if mapped != "unknown" {
+        currentActiveType = mapped
+        currentActiveId = output.uid
+        break
+      }
+    }
+
+    // Build final devices with isSelected flag
+    var finalDevices: [[String: Any]] = []
+    for device in rawDevices {
+      let devId = device["id"] as? String ?? ""
+      let devType = device["type"] as? String ?? ""
+
+      var isSelected = false
+      if let preferredType = preferredDeviceType {
+        if preferredType == "bluetooth" || preferredType == "airpods" {
+          isSelected = (devType == "bluetooth" || devType == "airpods")
+        } else if preferredType == "wiredHeadset" || preferredType == "usbAudio" {
+          isSelected = (devType == "wiredHeadset" || devType == "usbAudio")
+        } else {
+          isSelected = (devType == preferredType)
+        }
+      } else {
+        if currentActiveId.isEmpty {
+          if UIDevice.current.userInterfaceIdiom == .phone {
+            isSelected = (devType == "receiver")
+          } else {
+            isSelected = (devType == "speaker")
+          }
+        } else {
+          isSelected = (devId == currentActiveId)
+        }
+      }
+
+      finalDevices.append([
+        "id": devId,
+        "name": device["name"] as? String ?? "",
+        "type": devType,
+        "isSelected": isSelected
+      ])
+    }
+
+    // Cache result
+    cachedDevices = finalDevices
+    cachedDevicesTimestamp = Date()
+
+    return finalDevices
+  }
+
+  // FIX #2: Extracted state synchronization from getAvailableDevices
+  private func syncPreferredDeviceWithCurrentRoute(session: AVAudioSession) {
+    let hasBluetooth = getAvailableDevices(session: session).contains {
       let t = $0["type"] as? String
       return t == "bluetooth" || t == "airpods"
     }
-    let hasWired = rawDevices.contains {
+    let hasWired = getAvailableDevices(session: session).contains {
       let t = $0["type"] as? String
       return t == "wiredHeadset" || t == "usbAudio"
     }
@@ -351,7 +506,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
       if preferredType == "speaker" || preferredType == "receiver" {
         isPreferredConnected = true
       } else {
-        isPreferredConnected = rawDevices.contains { ($0["type"] as? String) == preferredType }
+        isPreferredConnected = getAvailableDevices(session: session).contains { ($0["type"] as? String) == preferredType }
       }
 
       if !isPreferredConnected {
@@ -361,7 +516,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
       }
     }
 
-    // Incur active system route details
+    // Infer active system route details
     var currentActiveType = "unknown"
     var currentActiveId = ""
     for output in session.currentRoute.outputs {
@@ -400,42 +555,6 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
         }
       }
     }
-
-    var finalDevices: [[String: Any]] = []
-    for device in rawDevices {
-      let devId = device["id"] as? String ?? ""
-      let devType = device["type"] as? String ?? ""
-
-      var isSelected = false
-      if let preferredType = preferredDeviceType {
-        if preferredType == "bluetooth" || preferredType == "airpods" {
-          isSelected = (devType == "bluetooth" || devType == "airpods")
-        } else if preferredType == "wiredHeadset" || preferredType == "usbAudio" {
-          isSelected = (devType == "wiredHeadset" || devType == "usbAudio")
-        } else {
-          isSelected = (devType == preferredType)
-        }
-      } else {
-        if currentActiveId.isEmpty {
-          if UIDevice.current.userInterfaceIdiom == .phone {
-            isSelected = (devType == "receiver")
-          } else {
-            isSelected = (devType == "speaker")
-          }
-        } else {
-          isSelected = (devId == currentActiveId)
-        }
-      }
-
-      finalDevices.append([
-        "id": devId,
-        "name": device["name"] as? String ?? "",
-        "type": devType,
-        "isSelected": isSelected
-      ])
-    }
-
-    return finalDevices
   }
 
   private func getCurrentAudioRoute(session: AVAudioSession) -> [String: Any]? {
@@ -485,18 +604,13 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
            session.currentRoute.inputs.contains { $0.uid == portUID }
   }
 
-  // MARK: - Category management
+  // MARK: - Category Management
 
   private func ensurePlayAndRecordCategory(session: AVAudioSession, options: AVAudioSession.CategoryOptions = [.allowBluetooth, .allowBluetoothA2DP]) {
     log("ensurePlayAndRecordCategory starting. Category: \(session.category.rawValue), Options: \(session.categoryOptions), requestedOptions: \(options)")
 
-    // If CallKit currently owns an active call, avoid fighting it for session
-    // configuration. CallKit configures AVAudioSession itself around provider
-    // callbacks (didActivate/didDeactivate); mutating category here concurrently
-    // can silently lose to CallKit's own configuration, which is a common source
-    // of routes that appear to "not stick".
-    let callObserver = CXCallObserver()
-    if !callObserver.calls.isEmpty {
+    // FIX #4: Check for truly active CallKit calls, not just any call in the array
+    if hasActiveCallKitCall() {
       log("ensurePlayAndRecordCategory: Active CallKit call detected — skipping category mutation to avoid conflicting with CallKit's own AVAudioSession configuration.")
       return
     }
@@ -506,6 +620,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
         try session.setCategory(.playAndRecord, mode: .voiceChat, options: options)
         if shouldManageActiveState() {
           try session.setActive(true, options: .notifyOthersOnDeactivation)
+          didActivateSession = true  // FIX #9: Track that we activated it
         }
         log("ensurePlayAndRecordCategory: AVAudioSession category set to playAndRecord with voiceChat mode, options: \(options).")
       } catch {
@@ -690,6 +805,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     }
     preferredDeviceId = nil
     preferredDeviceType = nil
+    didActivateSession = false
     handleRouteChange(notification: Notification(name: AVAudioSession.routeChangeNotification))
   }
 
@@ -698,6 +814,7 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     if shouldManageActiveState() {
       do {
         try session.setActive(false, options: .notifyOthersOnDeactivation)
+        didActivateSession = false
       } catch {
         log("endCallSession: failed to deactivate session: \(error.localizedDescription)")
       }
@@ -781,47 +898,28 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
     return result
   }
 
+  // FIX #9: Track whether the plugin itself activated the session
   private func shouldManageActiveState() -> Bool {
     // 1. Check if CallKit has active calls
-    let callObserver = CXCallObserver()
-    if !callObserver.calls.isEmpty {
+    if hasActiveCallKitCall() {
       return false
     }
 
-    // 2. Check if a WebRTC or other VoIP audio session is active
+    // 2. Only manage if we activated it ourselves, or if no one else has taken over
+    if didActivateSession {
+      return true
+    }
+
+    // 3. If session is not active or not in voice mode, we can manage it
     let session = AVAudioSession.sharedInstance()
-    if session.category == .playAndRecord && (session.mode == .voiceChat || session.mode == .videoChat) {
-      return false
+    if !session.isOtherAudioPlaying && session.category != .playAndRecord {
+      return true
     }
 
-    return true
+    return false
   }
 
   // MARK: - Experimental: influence CallKit's native audio-route sheet
-  //
-  // UNDOCUMENTED BEHAVIOR WARNING: The native CallKit in-call audio-route
-  // sheet (the system UI, not this plugin's own picker) is built and
-  // populated entirely by iOS using a private heuristic over AVAudioSession
-  // category options and the current active route. There is no public API to
-  // filter, hide, or reorder entries in that sheet.
-  //
-  // Observed behavior this method targets: after overriding to Speaker while
-  // Bluetooth is connected, the native sheet omits the earpiece ("iPhone")
-  // row and shows only Speaker + Bluetooth. After the user then taps the
-  // Bluetooth entry from that same sheet, the earpiece row reappears as an
-  // option, even though category options (.allowBluetooth /
-  // .allowBluetoothA2DP) have not changed between the two states.
-  //
-  // This method re-asserts the Bluetooth input as the explicit preferred
-  // input once Bluetooth becomes the active route, WITHOUT touching category
-  // options (removing .allowBluetooth/.allowBluetoothA2DP while Bluetooth is
-  // active would make BT ineligible and force an immediate fallback away
-  // from it, which is not the goal). This is an experiment to see whether
-  // reinforcing the preferred input changes what the native sheet offers as
-  // alternatives — it is not guaranteed to have any effect, and the
-  // underlying heuristic may change across iOS versions or devices. Verify
-  // on a real device with a real active call; this cannot be validated in a
-  // simulator.
   private func reinforceBluetoothPreferredInputIfActive(session: AVAudioSession) {
     let isBluetoothActive = session.currentRoute.outputs.contains {
       $0.portType == .bluetoothHFP || $0.portType == .bluetoothA2DP || $0.portType == .bluetoothLE
@@ -845,6 +943,20 @@ public class FlutterVoipAudioRouteManagerIosPlugin: NSObject, FlutterPlugin, Flu
       log("reinforceBluetoothPreferredInputIfActive: re-asserted preferred input to \(btInput.portName)")
     } catch {
       log("reinforceBluetoothPreferredInputIfActive: failed to set preferred input: \(error.localizedDescription)")
+    }
+  }
+}
+
+extension FlutterVoipAudioRouteManagerIosPlugin: CXCallObserverDelegate {
+  public func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
+    log("callObserver:callChanged: hasConnected=\(call.hasConnected), hasEnded=\(call.hasEnded), isOutgoing=\(call.isOutgoing)")
+
+    // When an incoming call is accepted by the user
+    if !call.isOutgoing && call.hasConnected && !call.hasEnded {
+      log("Incoming call accepted by user. Starting streams.")
+      let session = AVAudioSession.sharedInstance()
+      ensurePlayAndRecordCategory(session: session)
+      sendRouteAndDevicesEvents(session: session)
     }
   }
 }
