@@ -1,15 +1,8 @@
 name: voip_audio_route_manager
 description: "Flutter package for VoIP audio routing and management. Switch output between speakerphone, earpiece, wired headsets, and Bluetooth devices for WebRTC, SIP, and calling apps."
-version: 1.1.2
+version: 1.1.3
 homepage: https://github.com/NemiKardani/voip_audio_route_manager
 repository: https://github.com/NemiKardani/voip_audio_route_manager/tree/main/voip_audio_route_manager
-topics:
-  - voip
-  - audio-routing
-  - webrtc
-  - bluetooth
-  - speakerphone
-
 environment:
   sdk: '>=3.0.0 <4.0.0'
   flutter: '>=3.35.0'
@@ -19,12 +12,49 @@ dependencies:
     sdk: flutter
   
   # Using 'any' makes version resolution dynamic and avoids manual bumping when platform packages update.
-  voip_audio_route_manager_platform_interface: ^1.1.0
-  voip_audio_route_manager_android: ^1.1.0
-  voip_audio_route_manager_ios: ^1.1.2
-  voip_audio_route_manager_macos: ^1.1.2
-  voip_audio_route_manager_web: ^1.1.0
 
+
+
+
+
+
+
+
+
+
+
+
+
+  # --- Sibling Dependencies (Auto-managed) ---
+  voip_audio_route_manager_platform_interface: ^1.1.0
+  # voip_audio_route_manager_platform_interface:
+  #   path: ../voip_audio_route_manager_platform_interface
+  voip_audio_route_manager_android: ^1.1.2
+  # voip_audio_route_manager_android:
+  #   path: ../voip_audio_route_manager_android
+  voip_audio_route_manager_ios: ^1.1.3
+  # voip_audio_route_manager_ios:
+  #   path: ../voip_audio_route_manager_ios
+  voip_audio_route_manager_macos: ^1.1.2
+  # voip_audio_route_manager_macos:
+  #   path: ../voip_audio_route_manager_macos
+  voip_audio_route_manager_web: ^1.1.0
+  # voip_audio_route_manager_web:
+  #   path: ../voip_audio_route_manager_web
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  plugin_platform_interface: ^2.1.8
+
+
+
+
+
+
+
+# --- Sibling Overrides (Auto-managed) ---
 dependency_overrides:
   voip_audio_route_manager_platform_interface:
     path: ../voip_audio_route_manager_platform_interface
@@ -36,12 +66,12 @@ dependency_overrides:
     path: ../voip_audio_route_manager_macos
   voip_audio_route_manager_web:
     path: ../voip_audio_route_manager_web
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.0
-  plugin_platform_interface: ^2.1.8
+topics:
+  - voip
+  - audio-routing
+  - webrtc
+  - bluetooth
+  - speakerphone
 
 flutter:
   plugin:
@@ -54,3 +84,11 @@ flutter:
         default_package: voip_audio_route_manager_macos
       web:
         default_package: voip_audio_route_manager_web
+
+
+# --- Sibling Overrides (Auto-managed) ---
+
+
+
+
+
