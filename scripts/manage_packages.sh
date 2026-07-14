@@ -578,6 +578,10 @@ def extract_dependencies(section_lines, sibling_names, filter_siblings=False):
     for line in section_lines[1:]:  # Skip section header
         stripped = line.strip()
         
+        # Discard empty lines completely inside the dependencies parsing to prevent accumulation
+        if not stripped:
+            continue
+
         # Skip sibling-related lines and auto-managed markers completely if filtering
         if filter_siblings:
             is_sibling_related = False
@@ -591,7 +595,7 @@ def extract_dependencies(section_lines, sibling_names, filter_siblings=False):
             if is_sibling_related:
                 continue
 
-        if not stripped or stripped.startswith('#'):
+        if stripped.startswith('#'):
             if current_pkg:
                 current_block.append(line)
             continue
@@ -690,13 +694,11 @@ def main():
                     if pkg_name not in sibling_names:
                         new_lines.extend(block)
                 if referenced_deps:
-                    new_lines.append("")
                     new_lines.append("  # --- Sibling Dependencies (Auto-managed) ---")
                     for sib in referenced_deps:
                         sib_dir = os.path.abspath(os.path.join(root_dir, sib['path']))
                         rel_path = os.path.relpath(sib_dir, target_dir)
                         new_lines.extend(build_dependency_block(sib['name'], sib['version'], rel_path, mode))
-                    new_lines.append("")
                 new_sections[section_name] = new_lines
             elif section_name == 'dev_dependencies':
                 new_lines = [lines[0]]
@@ -705,13 +707,11 @@ def main():
                     if pkg_name not in sibling_names:
                         new_lines.extend(block)
                 if referenced_dev_deps:
-                    new_lines.append("")
                     new_lines.append("  # --- Sibling Dependencies (Auto-managed) ---")
                     for sib in referenced_dev_deps:
                         sib_dir = os.path.abspath(os.path.join(root_dir, sib['path']))
                         rel_path = os.path.relpath(sib_dir, target_dir)
                         new_lines.extend(build_dependency_block(sib['name'], sib['version'], rel_path, mode))
-                    new_lines.append("")
                 new_sections[section_name] = new_lines
             elif section_name == 'dependency_overrides':
                 # Skip - we'll rebuild this at the end
@@ -731,7 +731,6 @@ def main():
         referenced_all = referenced_deps + referenced_dev_deps
 
         if referenced_all or non_sibling_overrides:
-            override_lines.append("")
             override_lines.append("# --- Sibling Overrides (Auto-managed) ---")
             override_lines.append("dependency_overrides:")
             override_lines.extend(non_sibling_overrides)

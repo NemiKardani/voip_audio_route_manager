@@ -10,6 +10,10 @@
 - **iOS**: Cached results of available devices query (`getAvailableDevices`) with validation to optimize CPU overhead.
 - **iOS**: Prevented redundant preferred input reinforcement on programmatic route changes.
 - **Android**: Modernized Kotlin/Gradle plugin configuration for AGP 9+ compatibility by refactoring compile options from deprecated `kotlinOptions`.
+- **Android**: On Android 12+ (API 31+), retrieve available devices via `availableCommunicationDevices` to ensure device IDs match the selection API.
+- **Android**: Added retry logic (with a 200ms delay) for background route transitions when communication routing requests return pending/failed.
+- **Android**: Ensured communication mode and audio focus are initialized prior to all routing calls.
+- **Android**: Abandon previous audio focus prior to requesting new focus to prevent focus leaks.
 
 ## 1.1.2 - 2026-07-06
 
