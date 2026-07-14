@@ -2,6 +2,10 @@
 
 ### Fixed
 - Modernized Kotlin/Gradle plugin configuration for AGP 9+ compatibility by refactoring compile options from deprecated `kotlinOptions`.
+- On Android 12+ (API 31+), retrieve available devices via `availableCommunicationDevices` to ensure device IDs match the selection API.
+- Added retry logic (with a 200ms delay) for background route transitions when communication routing requests return pending/failed.
+- Ensured communication mode and audio focus are initialized prior to all routing calls.
+- Abandon previous audio focus prior to requesting new focus to prevent focus leaks.
 
 ## 1.1.0 - 2026-06-17
 

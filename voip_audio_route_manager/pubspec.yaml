@@ -10,21 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
   # Using 'any' makes version resolution dynamic and avoids manual bumping when platform packages update.
-
-
-
-
-
-
-
-
-
-
-
-
-
   # --- Sibling Dependencies (Auto-managed) ---
   voip_audio_route_manager_platform_interface: ^1.1.0
   # voip_audio_route_manager_platform_interface:
@@ -41,19 +27,11 @@ dependencies:
   voip_audio_route_manager_web: ^1.1.0
   # voip_audio_route_manager_web:
   #   path: ../voip_audio_route_manager_web
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
   plugin_platform_interface: ^2.1.8
-
-
-
-
-
-
-
 # --- Sibling Overrides (Auto-managed) ---
 dependency_overrides:
   voip_audio_route_manager_platform_interface:
@@ -87,6 +65,10 @@ flutter:
 
 
 # --- Sibling Overrides (Auto-managed) ---
+
+
+
+
 
 
 

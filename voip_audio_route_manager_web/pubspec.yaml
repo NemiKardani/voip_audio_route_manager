@@ -13,36 +13,14 @@ dependencies:
   web: '>=0.5.0 <2.0.0'
   flutter_web_plugins:
     sdk: flutter
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   # --- Sibling Dependencies (Auto-managed) ---
   voip_audio_route_manager_platform_interface: ^1.1.0
   # voip_audio_route_manager_platform_interface:
   #   path: ../voip_audio_route_manager_platform_interface
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
-
-
-
-
-
-
-
 # --- Sibling Overrides (Auto-managed) ---
 dependency_overrides:
   voip_audio_route_manager_platform_interface:
@@ -95,6 +73,8 @@ flutter:
 
 
 # --- Sibling Overrides (Auto-managed) ---
+
+
 
 
 
