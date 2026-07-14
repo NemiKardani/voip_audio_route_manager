@@ -945,7 +945,129 @@ run_format() {
   fi
 }
 
-# 7. Show package info
+# 7. Create Git release tag
+create_git_tags() {
+  if ! select_packages; then return; fi
+
+  echo -e "\n${BLUE}Creating Git tags for selected packages...${NC}"
+  local created=0
+  local skipped=0
+  declare -a created_tags=()
+  
+  local prev_dir="$PWD"
+  cd "$ROOT_DIR" || return 1
+  
+  for ((i=0; i<selected_count; i++)); do
+    local idx="${selected_indices[i]}"
+    local pkg_name="${package_names[idx]}"
+    local version="${package_versions[idx]}"
+    
+    # Standard monorepo tag format: package_name-vversion
+    local tag_name="${pkg_name}-v${version}"
+    
+    echo -e "\n${BOLD}=== Tagging $pkg_name ===${NC}"
+    echo -e "Target tag: ${GREEN}$tag_name${NC}"
+    
+    # Check if tag already exists locally, if so overwrite and continue
+    if git rev-parse "$tag_name" &>/dev/null; then
+      echo -e "${YELLOW}Tag '$tag_name' already exists locally. Overwriting...${NC}"
+      git tag -d "$tag_name" >/dev/null
+    fi
+    
+    # Create the annotated Git tag
+    if git tag -a "$tag_name" -m "Release $tag_name"; then
+      echo -e "${GREEN}✓ Successfully created local tag '$tag_name'${NC}"
+      created_tags+=("$tag_name")
+      created=$((created + 1))
+    else
+      echo -e "${RED}✗ Failed to create tag '$tag_name'${NC}"
+    fi
+  done
+
+  echo -e "\n${BLUE}Git Tagging Summary:${NC}"
+  echo -e "  ${GREEN}Created:${NC} $created"
+  echo -e "  ${YELLOW}Skipped:${NC} $skipped"
+
+  if [ $created -eq 0 ]; then
+    cd "$prev_dir" || return 1
+    return
+  fi
+
+  # Push to origin confirmation
+  echo ""
+  read -rp "Do you want to push branch and tags to git remote (origin)? (y/N): " push_confirm
+  if [[ ! "$push_confirm" =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}Push cancelled. Local tags were kept.${NC}"
+    cd "$prev_dir" || return 1
+    return
+  fi
+
+  # 1. Select branch
+  local branches=()
+  local current_branch=""
+  current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  
+  # Read local branches
+  while IFS= read -r br; do
+    if [ -n "$br" ]; then
+      branches+=("$br")
+    fi
+  done < <(git branch --format='%(refname:short)' 2>/dev/null)
+
+  if [ ${#branches[@]} -eq 0 ]; then
+    echo -e "${RED}No local branches found. Cannot push branch commits.${NC}"
+  else
+    # Find index of current branch for default selection
+    local default_idx=0
+    for ((idx=0; idx<${#branches[@]}; idx++)); do
+      if [ "${branches[idx]}" = "$current_branch" ]; then
+        default_idx=$idx
+        break
+      fi
+    done
+
+    select_menu_radio "Select branch to push:" "$default_idx" "${branches[@]}"
+    local target_branch="${branches[selection_result]}"
+
+    echo -e "\nPushing branch '${GREEN}$target_branch${NC}' to origin..."
+    if git push origin "$target_branch"; then
+      echo -e "${GREEN}✓ Successfully pushed branch '$target_branch' to origin${NC}"
+    else
+      echo -e "${YELLOW}Warning: Push failed. The branch may have drifted on remote.${NC}"
+      read -rp "Do you want to FORCE push branch '$target_branch'? (y/N): " force_branch
+      if [[ "$force_branch" =~ ^[Yy]$ ]]; then
+        if git push origin "$target_branch" --force; then
+          echo -e "${GREEN}✓ Successfully force pushed branch '$target_branch' to origin${NC}"
+        else
+          echo -e "${RED}✗ Failed to force push branch '$target_branch'${NC}"
+        fi
+      fi
+    fi
+  fi
+
+  # 2. Push created tags
+  echo -e "\nPushing release tags to origin..."
+  for tag in "${created_tags[@]}"; do
+    echo -e "\nPushing tag '${GREEN}$tag${NC}' to origin..."
+    if git push origin "$tag"; then
+      echo -e "${GREEN}✓ Successfully pushed tag '$tag' to origin${NC}"
+    else
+      echo -e "${YELLOW}Warning: Push failed. Tag '$tag' may already exist on remote.${NC}"
+      read -rp "Do you want to FORCE push tag '$tag'? (y/N): " force_tag
+      if [[ "$force_tag" =~ ^[Yy]$ ]]; then
+        if git push origin "$tag" --force; then
+          echo -e "${GREEN}✓ Successfully force pushed tag '$tag' to origin${NC}"
+        else
+          echo -e "${RED}✗ Failed to force push tag '$tag'${NC}"
+        fi
+      fi
+    fi
+  done
+
+  cd "$prev_dir" || return 1
+}
+
+# 8. Show package info
 show_package_info() {
   discover_packages
 
@@ -999,7 +1121,7 @@ main() {
   while true; do
     echo -e "\n${BOLD}====================================================${NC}"
     echo -e "${BOLD}      Package Settings Manager (${CYAN}federated setup${NC}${BOLD})${NC}"
-    echo -e "${BOLD}====================================================${NC}"
+    echo -e "\n===================================================="
 
     if [ $package_count -gt 0 ]; then
       echo -e "${GREEN}$package_count package(s) discovered${NC}"
@@ -1015,6 +1137,7 @@ main() {
       "🔍 Analyze packages (flutter analyze)" \
       "🧪 Test packages (flutter test)" \
       "✨ Format code (dart format)" \
+      "🏷️  Create Git release tag" \
       "ℹ️  Show package info" \
       "🚪 Exit"
 
@@ -1027,8 +1150,9 @@ main() {
       4) run_analyze ;;
       5) run_tests ;;
       6) run_format ;;
-      7) show_package_info ;;
-      8) 
+      7) create_git_tags ;;
+      8) show_package_info ;;
+      9) 
         echo -e "\n${GREEN}Goodbye!${NC}"
         exit 0 
         ;;
